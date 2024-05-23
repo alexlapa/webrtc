@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod auth_test;
 
-use std::net::SocketAddr;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{
+    net::SocketAddr,
+    time::{Duration, SystemTime, UNIX_EPOCH},
+};
 
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use md5::{Digest, Md5};
 use ring::hmac;
 
@@ -15,7 +16,8 @@ pub trait AuthHandler {
     fn auth_handle(&self, username: &str, realm: &str, src_addr: SocketAddr) -> Result<Vec<u8>>;
 }
 
-/// `generate_long_term_credentials()` can be used to create credentials valid for `duration` time/
+/// `generate_long_term_credentials()` can be used to create credentials valid
+/// for `duration` time/
 pub fn generate_long_term_credentials(
     shared_secret: &str,
     duration: Duration,
@@ -35,7 +37,8 @@ fn long_term_credentials(username: &str, shared_secret: &str) -> String {
     BASE64_STANDARD.encode(password)
 }
 
-/// A convenience function to easily generate keys in the format used by [`AuthHandler`].
+/// A convenience function to easily generate keys in the format used by
+/// [`AuthHandler`].
 pub fn generate_auth_key(username: &str, realm: &str, password: &str) -> Vec<u8> {
     let s = format!("{username}:{realm}:{password}");
 

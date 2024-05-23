@@ -3,14 +3,12 @@ mod allocation_manager_test;
 
 use std::collections::HashMap;
 
+use crate::{stun::textattrs::Username, util::Conn};
 use futures::future;
-use stun::textattrs::Username;
 use tokio::sync::mpsc;
-use util::Conn;
 
 use super::*;
-use crate::error::*;
-use crate::relay::*;
+use crate::{error::*, relay::*};
 
 /// `ManagerConfig` a bag of config params for `Manager`.
 pub struct ManagerConfig {

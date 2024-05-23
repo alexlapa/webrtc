@@ -1,13 +1,9 @@
 use std::sync::Arc;
 
-use tokio::sync::mpsc;
-use tokio::time::Duration;
-use util::Conn;
+use crate::util::Conn;
+use tokio::{sync::mpsc, time::Duration};
 
-use crate::allocation::*;
-use crate::auth::*;
-use crate::error::*;
-use crate::relay::*;
+use crate::{allocation::*, auth::*, error::*, relay::*};
 
 /// ConnConfig is used for UDP listeners
 pub struct ConnConfig {
@@ -37,7 +33,8 @@ pub struct ServerConfig {
     /// allowing users to customize Pion TURN with custom behavior.
     pub auth_handler: Arc<dyn AuthHandler + Send + Sync>,
 
-    /// `channel_bind_timeout` sets the lifetime of channel binding. Defaults to 10 minutes.
+    /// `channel_bind_timeout` sets the lifetime of channel binding. Defaults
+    /// to 10 minutes.
     pub channel_bind_timeout: Duration,
 
     /// To receive notify on allocation close event, with metrics data.

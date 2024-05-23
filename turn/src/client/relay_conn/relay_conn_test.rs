@@ -67,7 +67,7 @@ async fn test_relay_conn() -> Result<()> {
         (b.addr, b.number)
     };
 
-    //let binding_mgr = Arc::clone(&rci.binding_mgr);
+    // let binding_mgr = Arc::clone(&rci.binding_mgr);
     let rc_obs = Arc::clone(&rci.obs);
     let nonce = rci.nonce.clone();
     let integrity = rci.integrity.clone();

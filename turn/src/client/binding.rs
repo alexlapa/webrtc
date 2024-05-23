@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod binding_test;
 
-use std::collections::HashMap;
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 use tokio::time::Instant;
 
@@ -31,12 +30,12 @@ pub(crate) struct Binding {
 
 impl Binding {
     pub(crate) fn set_state(&mut self, state: BindingState) {
-        //atomic.StoreInt32((*int32)(&b.st), int32(state))
+        // atomic.StoreInt32((*int32)(&b.st), int32(state))
         self.st = state;
     }
 
     pub(crate) fn state(&self) -> BindingState {
-        //return BindingState(atomic.LoadInt32((*int32)(&b.st)))
+        // return BindingState(atomic.LoadInt32((*int32)(&b.st)))
         self.st
     }
 

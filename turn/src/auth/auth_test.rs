@@ -36,25 +36,24 @@ fn test_generate_auth_key() -> Result<()> {
 #[cfg(target_family = "unix")]
 #[tokio::test]
 async fn test_new_long_term_auth_handler() -> Result<()> {
-    use std::net::IpAddr;
-    use std::str::FromStr;
-    use std::sync::Arc;
+    use std::{net::IpAddr, str::FromStr, sync::Arc};
 
+    use crate::util::vnet::net::*;
     use tokio::net::UdpSocket;
-    use util::vnet::net::*;
 
-    use crate::client::*;
-    use crate::relay::relay_static::*;
-    use crate::server::config::*;
-    use crate::server::*;
+    use crate::{
+        client::*,
+        relay::*,
+        server::{config::*, *},
+    };
 
-    //env_logger::init();
+    // env_logger::init();
 
     const SHARED_SECRET: &str = "HELLO_WORLD";
 
     // here, it should use static port, like "0.0.0.0:3478",
-    // but, due to different test environment, let's fake it by using "0.0.0.0:0"
-    // to auto assign a "static" port
+    // but, due to different test environment, let's fake it by using
+    // "0.0.0.0:0" to auto assign a "static" port
     let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
     let server_port = conn.local_addr()?.port();
 

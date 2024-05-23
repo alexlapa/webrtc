@@ -7,39 +7,31 @@ pub mod permission;
 pub mod relay_conn;
 pub mod transaction;
 
-use std::net::SocketAddr;
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{net::SocketAddr, str::FromStr, sync::Arc};
 
+use crate::{
+    stun::{
+        agent::*, attributes::*, error_code::*, fingerprint::*, integrity::*, message::*,
+        textattrs::*, xoraddr::*,
+    },
+    util::{conn::*, vnet::net::*},
+};
 use async_trait::async_trait;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
+use base64::{prelude::BASE64_STANDARD, Engine};
 use binding::*;
 use relay_conn::*;
-use stun::agent::*;
-use stun::attributes::*;
-use stun::error_code::*;
-use stun::fingerprint::*;
-use stun::integrity::*;
-use stun::message::*;
-use stun::textattrs::*;
-use stun::xoraddr::*;
-use tokio::pin;
-use tokio::select;
-use tokio::sync::{mpsc, Mutex};
+use tokio::{
+    pin, select,
+    sync::{mpsc, Mutex},
+};
 use tokio_util::sync::CancellationToken;
 use transaction::*;
-use util::conn::*;
-use util::vnet::net::*;
 
-use crate::error::*;
-use crate::proto::chandata::*;
-use crate::proto::data::*;
-use crate::proto::lifetime::*;
-use crate::proto::peeraddr::*;
-use crate::proto::relayaddr::*;
-use crate::proto::reqtrans::*;
-use crate::proto::PROTO_UDP;
+use crate::{
+    error::*,
+    proto::{chandata::*, data::*, lifetime::*, peeraddr::*, relayaddr::*, reqtrans::*, PROTO_UDP},
+    util,
+};
 
 const DEFAULT_RTO_IN_MS: u16 = 200;
 const MAX_DATA_BUFFER_SIZE: usize = u16::MAX as usize; // message size limit for Chromium
@@ -57,8 +49,10 @@ const MAX_READ_QUEUE_SIZE: usize = 1024;
 
 /// ClientConfig is a bag of config parameters for Client.
 pub struct ClientConfig {
-    pub stun_serv_addr: String, // STUN server address (e.g. "stun.abc.com:3478")
-    pub turn_serv_addr: String, // TURN server address (e.g. "turn.abc.com:3478")
+    pub stun_serv_addr: String, /* STUN server address (e.g.
+                                 * "stun.abc.com:3478") */
+    pub turn_serv_addr: String, /* TURN server address (e.g.
+                                 * "turn.abc.com:3478") */
     pub username: String,
     pub password: String,
     pub realm: String,
@@ -223,9 +217,10 @@ impl ClientInternal {
         self.stun_serv_addr.clone()
     }
 
-    /// `listen()` will have this client start listening on the `relay_conn` provided via the config.
-    /// This is optional. If not used, you will need to call `handle_inbound` method
-    /// to supply incoming data, instead.
+    /// `listen()` will have this client start listening on the `relay_conn`
+    /// provided via the config. This is optional. If not used, you will
+    /// need to call `handle_inbound` method to supply incoming data,
+    /// instead.
     async fn listen(&self) -> Result<()> {
         let conn = Arc::clone(&self.conn);
         let stun_serv_str = self.stun_serv_addr.clone();
@@ -290,7 +285,8 @@ impl ClientInternal {
     /// and the types of the message.
     /// Caller should check if the packet was handled by this client or not.
     /// If not handled, it is assumed that the packet is application data.
-    /// If an error is returned, the caller should discard the packet regardless.
+    /// If an error is returned, the caller should discard the packet
+    /// regardless.
     async fn handle_inbound(
         read_ch_tx: &Arc<Mutex<Option<mpsc::Sender<InboundData>>>>,
         data: &[u8],

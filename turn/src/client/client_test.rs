@@ -1,14 +1,13 @@
 use std::net::IpAddr;
 
-use tokio::net::UdpSocket;
-use tokio::time::Duration;
-use util::vnet::net::*;
+use tokio::{net::UdpSocket, time::Duration};
 
 use super::*;
-use crate::auth::*;
-use crate::relay::relay_static::*;
-use crate::server::config::*;
-use crate::server::*;
+use crate::{
+    auth::*,
+    relay::*,
+    server::{config::*, *},
+};
 
 async fn create_listening_test_client(rto_in_ms: u16) -> Result<Client> {
     let conn = UdpSocket::bind("0.0.0.0:0").await?;
@@ -54,7 +53,7 @@ async fn create_listening_test_client_with_stun_serv() -> Result<Client> {
 
 #[tokio::test]
 async fn test_client_with_stun_send_binding_request() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     let c = create_listening_test_client_with_stun_serv().await?;
 
@@ -105,7 +104,7 @@ async fn test_client_with_stun_send_binding_request_to_parallel() -> Result<()> 
 
 #[tokio::test]
 async fn test_client_with_stun_send_binding_request_to_timeout() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     let c = create_listening_test_client(10).await?;
 
@@ -134,8 +133,8 @@ async fn test_client_nonce_expiration() -> Result<()> {
     // env_logger::init();
 
     // here, it should use static port, like "0.0.0.0:3478",
-    // but, due to different test environment, let's fake it by using "0.0.0.0:0"
-    // to auto assign a "static" port
+    // but, due to different test environment, let's fake it by using
+    // "0.0.0.0:0" to auto assign a "static" port
     let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
     let server_port = conn.local_addr()?.port();
 

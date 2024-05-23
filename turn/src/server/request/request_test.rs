@@ -1,12 +1,12 @@
-use std::net::IpAddr;
-use std::str::FromStr;
+use std::{net::IpAddr, str::FromStr};
 
-use tokio::net::UdpSocket;
-use tokio::time::{Duration, Instant};
-use util::vnet::net::*;
+use crate::{relay::*, util::vnet::net::*};
+use tokio::{
+    net::UdpSocket,
+    time::{Duration, Instant},
+};
 
 use super::*;
-use crate::relay::relay_none::*;
 
 const STATIC_KEY: &str = "ABC";
 
@@ -58,8 +58,6 @@ impl AuthHandler for TestAuthHandler {
 
 #[tokio::test]
 async fn test_allocation_lifetime_deletion_zero_lifetime() -> Result<()> {
-    //env_logger::init();
-
     let l = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
 
     let allocation_manager = Arc::new(Manager::new(ManagerConfig {

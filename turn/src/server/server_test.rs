@@ -1,18 +1,13 @@
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::str::FromStr;
+use std::{
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
+};
 
-use tokio::net::UdpSocket;
-use tokio::sync::mpsc;
-use util::vnet::router::Nic;
-use util::vnet::*;
+use crate::util::vnet::{router::Nic, *};
+use tokio::{net::UdpSocket, sync::mpsc};
 
-use super::config::*;
-use super::*;
-use crate::auth::generate_auth_key;
-use crate::client::*;
-use crate::error::*;
-use crate::relay::relay_none::RelayAddressGeneratorNone;
-use crate::relay::relay_static::*;
+use super::{config::*, *};
+use crate::{auth::generate_auth_key, client::*, error::*, relay::*};
 
 struct TestAuthHandler {
     cred_map: HashMap<String, Vec<u8>>,
@@ -43,8 +38,8 @@ impl AuthHandler for TestAuthHandler {
 #[tokio::test]
 async fn test_server_simple() -> Result<()> {
     // here, it should use static port, like "0.0.0.0:3478",
-    // but, due to different test environment, let's fake it by using "0.0.0.0:0"
-    // to auto assign a "static" port
+    // but, due to different test environment, let's fake it by using
+    // "0.0.0.0:0" to auto assign a "static" port
     let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
     let server_port = conn.local_addr()?.port();
 
@@ -140,7 +135,8 @@ async fn build_vnet() -> Result<VNet> {
 
     // LAN
     let lan = Arc::new(Mutex::new(router::Router::new(router::RouterConfig {
-        static_ip: "5.6.7.8".to_owned(), // this router's external IP on eth0
+        static_ip: "5.6.7.8".to_owned(), /* this router's external IP on
+                                          * eth0 */
         cidr: "192.168.0.0/24".to_owned(),
         nat_type: Some(nat::NatType {
             mapping_behavior: nat::EndpointDependencyType::EndpointIndependent,

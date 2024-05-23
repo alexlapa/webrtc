@@ -2,27 +2,23 @@
 mod relay_conn_test;
 
 // client implements the API for a TURN client
-use std::io;
-use std::net::SocketAddr;
-use std::sync::Arc;
+use std::{io, net::SocketAddr, sync::Arc};
 
+use crate::{
+    stun::{
+        agent::*, attributes::*, error_code::*, fingerprint::*, integrity::*, message::*,
+        textattrs::*,
+    },
+    util::Conn,
+};
 use async_trait::async_trait;
-use stun::agent::*;
-use stun::attributes::*;
-use stun::error_code::*;
-use stun::fingerprint::*;
-use stun::integrity::*;
-use stun::message::*;
-use stun::textattrs::*;
-use tokio::sync::{mpsc, Mutex};
-use tokio::time::{Duration, Instant};
-use util::Conn;
+use tokio::{
+    sync::{mpsc, Mutex},
+    time::{Duration, Instant},
+};
 
-use super::binding::*;
-use super::periodic_timer::*;
-use super::permission::*;
-use super::transaction::*;
-use crate::{proto, Error};
+use super::{binding::*, periodic_timer::*, permission::*, transaction::*};
+use crate::{proto, util, Error};
 
 const PERM_REFRESH_INTERVAL: Duration = Duration::from_secs(120);
 const MAX_RETRY_ATTEMPTS: u16 = 3;
@@ -47,7 +43,8 @@ pub trait RelayConnObserver {
     ) -> Result<TransactionResult, Error>;
 }
 
-/// `RelayConnConfig` is a set of configuration params used by [`RelayConn::new()`].
+/// `RelayConnConfig` is a set of configuration params used by
+/// [`RelayConn::new()`].
 pub(crate) struct RelayConnConfig {
     pub(crate) relayed_addr: SocketAddr,
     pub(crate) integrity: MessageIntegrity,
@@ -67,7 +64,8 @@ pub struct RelayConnInternal<T: 'static + RelayConnObserver + Send + Sync> {
     lifetime: Duration,
 }
 
-/// `RelayConn` is the implementation of the Conn interfaces for UDP Relayed network connections.
+/// `RelayConn` is the implementation of the Conn interfaces for UDP Relayed
+/// network connections.
 pub struct RelayConn<T: 'static + RelayConnObserver + Send + Sync> {
     relayed_addr: SocketAddr,
     read_ch_rx: Arc<Mutex<mpsc::Receiver<InboundData>>>,
@@ -251,7 +249,8 @@ impl<T: RelayConnObserver + Send + Sync> RelayConnInternal<T> {
             {
                 // block only callers with the same binding until
                 // the binding transaction has been complete
-                // binding state may have been changed while waiting. check again.
+                // binding state may have been changed while waiting. check
+                // again.
                 if bind_st == BindingState::Idle {
                     let binding_mgr = Arc::clone(&self.binding_mgr);
                     let rc_obs = Arc::clone(&self.obs);
@@ -452,10 +451,14 @@ impl<T: RelayConnObserver + Send + Sync> RelayConnInternal<T> {
     }
 
     /// Closes the connection.
-    /// Any blocked `recv_from` or `send_to` operations will be unblocked and return errors.
+    /// Any blocked `recv_from` or `send_to` operations will be unblocked and
+    /// return errors.
     pub async fn close(&mut self) -> Result<(), Error> {
-        self.refresh_allocation(Duration::from_secs(0), true /* dontWait=true */)
-            .await
+        self.refresh_allocation(
+            Duration::from_secs(0),
+            true, // dontWait=true
+        )
+        .await
     }
 
     async fn refresh_allocation(

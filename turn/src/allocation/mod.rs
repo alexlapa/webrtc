@@ -6,31 +6,34 @@ pub mod channel_bind;
 pub mod five_tuple;
 pub mod permission;
 
-use std::collections::HashMap;
-use std::marker::{Send, Sync};
-use std::net::SocketAddr;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    marker::{Send, Sync},
+    net::SocketAddr,
+    sync::{atomic::Ordering, Arc, Mutex as SyncMutex},
+};
 
+use crate::{
+    stun::{agent::*, message::*, textattrs::Username},
+    util::Conn,
+};
 use channel_bind::*;
 use five_tuple::*;
 use permission::*;
 use portable_atomic::{AtomicBool, AtomicUsize};
-use stun::agent::*;
-use stun::message::*;
-use stun::textattrs::Username;
-use tokio::sync::oneshot::{self, Sender};
-use tokio::sync::{mpsc, Mutex};
-use tokio::time::{Duration, Instant};
-use util::sync::Mutex as SyncMutex;
-use util::Conn;
+use tokio::{
+    sync::{
+        mpsc,
+        oneshot::{self, Sender},
+        Mutex,
+    },
+    time::{Duration, Instant},
+};
 
-use crate::error::*;
-use crate::proto::chandata::*;
-use crate::proto::channum::*;
-use crate::proto::data::*;
-use crate::proto::peeraddr::*;
-use crate::proto::*;
+use crate::{
+    error::*,
+    proto::{chandata::*, channum::*, data::*, peeraddr::*, *},
+};
 
 const RTP_MTU: usize = 1500;
 
@@ -265,7 +268,7 @@ impl Allocation {
 
     pub async fn start(&self, lifetime: Duration) {
         let (reset_tx, mut reset_rx) = mpsc::channel(1);
-        self.reset_tx.lock().replace(reset_tx);
+        self.reset_tx.lock().unwrap().replace(reset_tx);
 
         let allocations = self.allocations.clone();
         let five_tuple = self.five_tuple;
@@ -302,13 +305,13 @@ impl Allocation {
     }
 
     fn stop(&self) -> bool {
-        let reset_tx = self.reset_tx.lock().take();
+        let reset_tx = self.reset_tx.lock().unwrap().take();
         reset_tx.is_none() || self.timer_expired.load(Ordering::SeqCst)
     }
 
     /// Updates the allocations lifetime.
     pub async fn refresh(&self, lifetime: Duration) {
-        let reset_tx = self.reset_tx.lock().clone();
+        let reset_tx = self.reset_tx.lock().unwrap().clone();
         if let Some(tx) = reset_tx {
             let _ = tx.send(lifetime).await;
         }
@@ -364,7 +367,9 @@ impl Allocation {
                         }
                     }
                     _ = drop_rx.as_mut() => {
-                        log::trace!("allocation has stopped, stop packet_handler. five_tuple: {:?}", five_tuple);
+                        log::trace!("allocation has stopped, \
+                            stop packet_handler. five_tuple: {:?}",
+                            five_tuple);
                         break;
                     }
                 };

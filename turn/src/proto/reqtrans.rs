@@ -3,17 +3,15 @@ mod reqtrans_test;
 
 use std::fmt;
 
-use stun::attributes::*;
-use stun::checks::*;
-use stun::message::*;
+use crate::stun::{self, attributes::*, checks::*, message::*};
 
 use super::*;
 
 /// `RequestedTransport` represents `REQUESTED-TRANSPORT` attribute.
 ///
 /// This attribute is used by the client to request a specific transport
-/// protocol for the allocated transport address. RFC 5766 only allows the use of
-/// codepoint 17 (User Datagram protocol).
+/// protocol for the allocated transport address. RFC 5766 only allows the use
+/// of codepoint 17 (User Datagram protocol).
 ///
 /// [RFC 5766 Section 14.7](https://www.rfc-editor.org/rfc/rfc5766#section-14.7).
 #[derive(Default, Debug, PartialEq, Eq)]

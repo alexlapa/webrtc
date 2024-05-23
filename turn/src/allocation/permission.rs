@@ -1,16 +1,17 @@
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{atomic::Ordering, Arc};
 
 use portable_atomic::AtomicBool;
-use tokio::sync::Mutex;
-use tokio::time::{Duration, Instant};
+use tokio::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
 
 use super::*;
 
 pub(crate) const PERMISSION_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
-/// `Permission` represents a TURN permission. TURN permissions mimic the address-restricted
-/// filtering mechanism of NATs that comply with [RFC4787].
+/// `Permission` represents a TURN permission. TURN permissions mimic the
+/// address-restricted filtering mechanism of NATs that comply with [RFC4787].
 ///
 /// https://tools.ietf.org/html/rfc5766#section-2.3
 pub struct Permission {

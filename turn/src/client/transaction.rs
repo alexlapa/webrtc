@@ -1,14 +1,16 @@
-use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr};
-use std::str::FromStr;
-use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    net::{IpAddr, Ipv4Addr, SocketAddr},
+    str::FromStr,
+    sync::{atomic::Ordering, Arc},
+};
 
+use crate::{stun::message::*, util::Conn};
 use portable_atomic::AtomicU16;
-use stun::message::*;
-use tokio::sync::{mpsc, Mutex};
-use tokio::time::Duration;
-use util::Conn;
+use tokio::{
+    sync::{mpsc, Mutex},
+    time::Duration,
+};
 
 use crate::error::*;
 
@@ -82,7 +84,7 @@ async fn on_rtx_timeout(
 }
 
 /// `TransactionResult` is a bag of result values of a transaction.
-#[derive(Debug)] //Clone
+#[derive(Debug)] // Clone
 pub struct TransactionResult {
     pub msg: Message,
     pub from: SocketAddr,
@@ -101,14 +103,17 @@ impl Default for TransactionResult {
     }
 }
 
-/// `TransactionConfig` is a set of config params used by [`Transaction::new()`].
+/// `TransactionConfig` is a set of config params used by
+/// [`Transaction::new()`].
 #[derive(Default)]
 pub struct TransactionConfig {
     pub key: String,
     pub raw: Vec<u8>,
     pub to: String,
     pub interval: u16,
-    pub ignore_result: bool, // true to throw away the result of this transaction (it will not be readable using wait_for_result)
+    pub ignore_result: bool, /* true to throw away the result of this
+                              * transaction (it will not be readable using
+                              * wait_for_result) */
 }
 
 /// `Transaction` represents a transaction.
@@ -132,7 +137,7 @@ impl Default for Transaction {
             to: String::new(),
             n_rtx: Arc::new(AtomicU16::new(0)),
             interval: Arc::new(AtomicU16::new(0)),
-            //timer: None,
+            // timer: None,
             timer_ch_tx: None,
             result_ch_tx: None,
             result_ch_rx: None,

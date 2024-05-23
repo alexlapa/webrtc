@@ -1,9 +1,7 @@
 #[cfg(test)]
 mod rsrvtoken_test;
 
-use stun::attributes::*;
-use stun::checks::*;
-use stun::message::*;
+use crate::stun::{self, attributes::*, checks::*, message::*};
 
 /// `ReservationToken` represents `RESERVATION-TOKEN` attribute.
 ///

@@ -10,9 +10,20 @@ homepage = "https://webrtc.rs"
 repository = "https://github.com/webrtc-rs/turn"
 
 [dependencies]
-util = { version = "0.9.0", path = "../util", package = "webrtc-util", default-features = false, features = ["conn", "vnet"] }
-stun = { version = "0.6.0", path = "../stun" }
-
+async-trait = "0.1"
+base64 = "0.21"
+bytes = "1"
+crc = "3"
+futures = "0.3"
+ipnet = "2.6.0"
+lazy_static = "1.4"
+log = "0.4"
+md-5 = "0.10"
+portable-atomic = "1.6"
+rand = "0.8"
+ring = "0.17"
+subtle = "2.4"
+thiserror = "1"
 tokio = { version = "1.32.0", features = [
     "fs",
     "io-util",
@@ -26,23 +37,31 @@ tokio = { version = "1.32.0", features = [
     "time",
 ] }
 tokio-util = "0.7"
-futures = "0.3"
-async-trait = "0.1"
-log = "0.4"
-base64 = "0.21"
-rand = "0.8"
-ring = "0.17"
-md-5 = "0.10"
-thiserror = "1"
-portable-atomic = "1.6"
+url = "2"
+
+[target.'cfg(not(windows))'.dependencies]
+nix = "0.26.2"
+libc = "0.2.126"
+
+[target.'cfg(windows)'.dependencies]
+bitflags = "1.3"
+winapi = { version = "0.3.9", features = [
+    "basetsd",
+    "guiddef",
+    "ws2def",
+    "winerror",
+    "ws2ipdef",
+] }
+
 
 [dev-dependencies]
-tokio-test = "0.4"
-env_logger = "0.10"
+async-global-executor = "2"
 chrono = "0.4.28"
-hex = "0.4"
 clap = "3"
-criterion = "0.5"
+criterion = { version = "0.5", features = ["async_futures"] }
+env_logger = "0.10"
+hex = "0.4"
+tokio-test = "0.4"
 
 [features]
 metrics = []
@@ -50,11 +69,6 @@ metrics = []
 [[bench]]
 name = "bench"
 harness = false
-
-[[example]]
-name = "turn_client_udp"
-path = "examples/turn_client_udp.rs"
-bench = false
 
 [[example]]
 name = "turn_server_udp"

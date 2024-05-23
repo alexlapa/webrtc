@@ -1,50 +1,55 @@
 #[cfg(test)]
 mod request_test;
 
-use std::collections::HashMap;
-use std::marker::{Send, Sync};
-use std::net::SocketAddr;
 #[cfg(feature = "metrics")]
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
-use std::time::SystemTime;
-
-use md5::{Digest, Md5};
-use stun::agent::*;
-use stun::attributes::*;
-use stun::error_code::*;
-use stun::fingerprint::*;
-use stun::integrity::*;
-use stun::message::*;
-use stun::textattrs::*;
-use stun::uattrs::*;
-use stun::xoraddr::*;
-use tokio::sync::Mutex;
-use tokio::time::{Duration, Instant};
-use util::Conn;
-
-use crate::allocation::allocation_manager::*;
-use crate::allocation::channel_bind::ChannelBind;
-use crate::allocation::five_tuple::*;
-use crate::allocation::permission::Permission;
-use crate::auth::*;
-use crate::error::*;
-use crate::proto::chandata::ChannelData;
-use crate::proto::channum::ChannelNumber;
-use crate::proto::data::Data;
-use crate::proto::evenport::EvenPort;
-use crate::proto::lifetime::*;
-use crate::proto::peeraddr::PeerAddress;
-use crate::proto::relayaddr::RelayedAddress;
-use crate::proto::reqfamily::{
-    RequestedAddressFamily, REQUESTED_FAMILY_IPV4, REQUESTED_FAMILY_IPV6,
+use std::{
+    collections::HashMap,
+    marker::{Send, Sync},
+    net::SocketAddr,
+    sync::Arc,
+    time::SystemTime,
 };
-use crate::proto::reqtrans::RequestedTransport;
-use crate::proto::rsrvtoken::ReservationToken;
-use crate::proto::*;
 
-pub(crate) const MAXIMUM_ALLOCATION_LIFETIME: Duration = Duration::from_secs(3600); // https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
-pub(crate) const NONCE_LIFETIME: Duration = Duration::from_secs(3600); // https://tools.ietf.org/html/rfc5766#section-4
+use crate::{
+    stun::{
+        self, agent::*, attributes::*, error_code::*, fingerprint::*, integrity::*, message::*,
+        textattrs::*, uattrs::*, xoraddr::*,
+    },
+    util::Conn,
+};
+use md5::{Digest, Md5};
+use tokio::{
+    sync::Mutex,
+    time::{Duration, Instant},
+};
+
+use crate::{
+    allocation::{
+        allocation_manager::*, channel_bind::ChannelBind, five_tuple::*, permission::Permission,
+    },
+    auth::*,
+    error::*,
+    proto::{
+        chandata::ChannelData,
+        channum::ChannelNumber,
+        data::Data,
+        evenport::EvenPort,
+        lifetime::*,
+        peeraddr::PeerAddress,
+        relayaddr::RelayedAddress,
+        reqfamily::{RequestedAddressFamily, REQUESTED_FAMILY_IPV4, REQUESTED_FAMILY_IPV6},
+        reqtrans::RequestedTransport,
+        rsrvtoken::ReservationToken,
+        *,
+    },
+};
+
+// https://tools.ietf.org/html/rfc5766#section-6.2 defines 3600 seconds recommendation
+pub(crate) const MAXIMUM_ALLOCATION_LIFETIME: Duration = Duration::from_secs(3600);
+
+// https://tools.ietf.org/html/rfc5766#section-4
+pub(crate) const NONCE_LIFETIME: Duration = Duration::from_secs(3600);
 
 /// Request contains all the state needed to process a single incoming datagram
 pub struct Request {
@@ -84,13 +89,6 @@ impl Request {
 
     /// Processes the give [`Request`]
     pub async fn handle_request(&mut self) -> Result<()> {
-        /*log::debug!(
-            "received {} bytes of udp from {} on {}",
-            self.buff.len(),
-            self.src_addr,
-            self.conn.local_addr().await?
-        );*/
-
         if ChannelData::is_channel_data(&self.buff) {
             self.handle_data_packet().await
         } else {
@@ -304,9 +302,9 @@ impl Request {
         let mut reservation_token = "".to_owned();
         let mut use_ipv4 = true;
 
-        // 2. The server checks if the 5-tuple is currently in use by an
-        //    existing allocation.  If yes, the server rejects the request with
-        //    a 437 (Allocation Mismatch) error.
+        // 2. The server checks if the 5-tuple is currently in use by an existing
+        //    allocation.  If yes, the server rejects the request with a 437 (Allocation
+        //    Mismatch) error.
         if self
             .allocation_manager
             .get_allocation(&five_tuple)
@@ -330,12 +328,12 @@ impl Request {
             .await;
         }
 
-        // 3. The server checks if the request contains a REQUESTED-TRANSPORT
-        //    attribute.  If the REQUESTED-TRANSPORT attribute is not included
-        //    or is malformed, the server rejects the request with a 400 (Bad
-        //    Request) error.  Otherwise, if the attribute is included but
-        //    specifies a protocol other that UDP, the server rejects the
-        //    request with a 442 (Unsupported Transport Protocol) error.
+        // 3. The server checks if the request contains a REQUESTED-TRANSPORT attribute.
+        //    If the REQUESTED-TRANSPORT attribute is not included or is malformed, the
+        //    server rejects the request with a 400 (Bad Request) error.  Otherwise, if
+        //    the attribute is included but specifies a protocol other that UDP, the
+        //    server rejects the request with a 442 (Unsupported Transport Protocol)
+        //    error.
         let mut requested_transport = RequestedTransport::default();
         if let Err(err) = requested_transport.get_from(m) {
             let bad_request_msg = build_msg(
@@ -366,11 +364,10 @@ impl Request {
             .await;
         }
 
-        // 4. The request may contain a DONT-FRAGMENT attribute.  If it does,
-        //    but the server does not support sending UDP datagrams with the DF
-        //    bit set to 1 (see Section 12), then the server treats the DONT-
-        //    FRAGMENT attribute in the Allocate request as an unknown
-        //    comprehension-required attribute.
+        // 4. The request may contain a DONT-FRAGMENT attribute.  If it does, but the
+        //    server does not support sending UDP datagrams with the DF bit set to 1
+        //    (see Section 12), then the server treats the DONT- FRAGMENT attribute in
+        //    the Allocate request as an unknown comprehension-required attribute.
         if m.contains(ATTR_DONT_FRAGMENT) {
             let msg = build_msg(
                 m.transaction_id,
@@ -392,14 +389,13 @@ impl Request {
             .await;
         }
 
-        // 5.  The server checks if the request contains a RESERVATION-TOKEN
-        //     attribute.  If yes, and the request also contains an EVEN-PORT
-        //     attribute, then the server rejects the request with a 400 (Bad
-        //     Request) error.  Otherwise, it checks to see if the token is
-        //     valid (i.e., the token is in range and has not expired and the
-        //     corresponding relayed transport address is still available).  If
-        //     the token is not valid for some reason, the server rejects the
-        //     request with a 508 (Insufficient Capacity) error.
+        // 5. The server checks if the request contains a RESERVATION-TOKEN attribute.
+        //    If yes, and the request also contains an EVEN-PORT attribute, then the
+        //    server rejects the request with a 400 (Bad Request) error.  Otherwise, it
+        //    checks to see if the token is valid (i.e., the token is in range and has
+        //    not expired and the corresponding relayed transport address is still
+        //    available).  If the token is not valid for some reason, the server rejects
+        //    the request with a 508 (Insufficient Capacity) error.
         let mut reservation_token_attr = ReservationToken::default();
         let reservation_token_attr_result = reservation_token_attr.get_from(m);
         if reservation_token_attr_result.is_ok() {
@@ -436,8 +432,9 @@ impl Request {
         let mut req_family = RequestedAddressFamily::default();
         match req_family.get_from(m) {
             Err(err) => {
-                // Currently, the RequestedAddressFamily::get_from() function returns
-                // Err::Other only when it is an unsupported address family.
+                // Currently, the RequestedAddressFamily::get_from() function
+                // returns Err::Other only when it is an
+                // unsupported address family.
                 if let stun::Error::Other(_) = err {
                     let addr_family_not_supported_msg = build_msg(
                         m.transaction_id,
@@ -482,12 +479,11 @@ impl Request {
             }
         }
 
-        // 6. The server checks if the request contains an EVEN-PORT attribute.
-        //    If yes, then the server checks that it can satisfy the request
-        //    (i.e., can allocate a relayed transport address as described
-        //    below).  If the server cannot satisfy the request, then the
-        //    server rejects the request with a 508 (Insufficient Capacity)
-        //    error.
+        // 6. The server checks if the request contains an EVEN-PORT attribute. If yes,
+        //    then the server checks that it can satisfy the request (i.e., can allocate
+        //    a relayed transport address as described below).  If the server cannot
+        //    satisfy the request, then the server rejects the request with a 508
+        //    (Insufficient Capacity) error.
         let mut even_port = EvenPort::default();
         if even_port.get_from(m).is_ok() {
             let mut random_port = 1;
@@ -519,17 +515,17 @@ impl Request {
             reservation_token = rand_seq(8);
         }
 
-        // 7. At any point, the server MAY choose to reject the request with a
-        //    486 (Allocation Quota Reached) error if it feels the client is
-        //    trying to exceed some locally defined allocation quota.  The
-        //    server is free to define this allocation quota any way it wishes,
-        //    but SHOULD define it based on the username used to authenticate
-        //    the request, and not on the client's transport address.
+        // 7. At any point, the server MAY choose to reject the request with a 486
+        //    (Allocation Quota Reached) error if it feels the client is trying to
+        //    exceed some locally defined allocation quota.  The server is free to
+        //    define this allocation quota any way it wishes, but SHOULD define it based
+        //    on the username used to authenticate the request, and not on the client's
+        //    transport address.
 
-        // 8. Also at any point, the server MAY choose to reject the request
-        //    with a 300 (Try Alternate) error if it wishes to redirect the
-        //    client to a different server.  The use of this error code and
-        //    attribute follow the specification in [RFC5389].
+        // 8. Also at any point, the server MAY choose to reject the request with a 300
+        //    (Try Alternate) error if it wishes to redirect the client to a different
+        //    server.  The use of this error code and attribute follow the specification
+        //    in [RFC5389].
         let lifetime_duration = allocation_lifetime(m);
         let a = match self
             .allocation_manager
@@ -567,12 +563,12 @@ impl Request {
         // response.  The success response contains:
         //   * An XOR-RELAYED-ADDRESS attribute containing the relayed transport
         //     address.
-        //   * A LIFETIME attribute containing the current value of the time-to-
-        //     expiry timer.
-        //   * A RESERVATION-TOKEN attribute (if a second relayed transport
-        //     address was reserved).
-        //   * An XOR-MAPPED-ADDRESS attribute containing the client's IP address
-        //     and port (from the 5-tuple).
+        //   * A LIFETIME attribute containing the current value of the time-to- expiry
+        //     timer.
+        //   * A RESERVATION-TOKEN attribute (if a second relayed transport address was
+        //     reserved).
+        //   * An XOR-MAPPED-ADDRESS attribute containing the client's IP address and
+        //     port (from the 5-tuple).
 
         let (src_ip, src_port) = (self.src_addr.ip(), self.src_addr.port());
         let relay_ip = a.relay_addr.ip();
@@ -635,10 +631,12 @@ impl Request {
         if lifetime_duration != Duration::from_secs(0) {
             let a = self.allocation_manager.get_allocation(&five_tuple).await;
             if let Some(a) = a {
-                // If a server receives a Refresh Request with a REQUESTED-ADDRESS-FAMILY
-                // attribute, and the attribute's value doesn't match the address
-                // family of the allocation, the server MUST reply with a 443 (Peer
-                // Address Family Mismatch) Refresh error response. [RFC 6156, Section 5.2]
+                // If a server receives a Refresh Request with a
+                // REQUESTED-ADDRESS-FAMILY attribute, and the
+                // attribute's value doesn't match the address
+                // family of the allocation, the server MUST reply with a 443
+                // (Peer Address Family Mismatch) Refresh error
+                // response. [RFC 6156, Section 5.2]
                 let mut req_family = RequestedAddressFamily::default();
                 if req_family.get_from(m).is_ok()
                     && ((req_family == REQUESTED_FAMILY_IPV6 && !a.relay_addr.is_ipv6())
@@ -716,10 +714,12 @@ impl Request {
                         break;
                     }
 
-                    // If an XOR-PEER-ADDRESS attribute contains an address of an address
-                    // family different than that of the relayed transport address for the
-                    // allocation, the server MUST generate an error response with the 443
-                    // (Peer Address Family Mismatch) response code. [RFC 6156, Section 6.2]
+                    // If an XOR-PEER-ADDRESS attribute contains an address of
+                    // an address family different than that
+                    // of the relayed transport address for the
+                    // allocation, the server MUST generate an error response
+                    // with the 443 (Peer Address Family
+                    // Mismatch) response code. [RFC 6156, Section 6.2]
                     if (peer_address.ip.is_ipv4() && !a.relay_addr.is_ipv4())
                         || (peer_address.ip.is_ipv6() && !a.relay_addr.is_ipv6())
                     {
@@ -859,10 +859,12 @@ impl Request {
                     .await;
                 }
                 _ => {
-                    // If the XOR-PEER-ADDRESS attribute contains an address of an address
-                    // family different than that of the relayed transport address for the
-                    // allocation, the server MUST generate an error response with the 443
-                    // (Peer Address Family Mismatch) response code. [RFC 6156, Section 7.2]
+                    // If the XOR-PEER-ADDRESS attribute contains an address of
+                    // an address family different than that
+                    // of the relayed transport address for the
+                    // allocation, the server MUST generate an error response
+                    // with the 443 (Peer Address Family
+                    // Mismatch) response code. [RFC 6156, Section 7.2]
                     if (peer_addr.ip.is_ipv4() && !a.relay_addr.is_ipv4())
                         || (peer_addr.ip.is_ipv6() && !a.relay_addr.is_ipv6())
                     {
@@ -960,7 +962,7 @@ pub(crate) fn rand_seq(n: usize) -> String {
 }
 
 pub(crate) fn build_nonce() -> Result<String> {
-    /* #nosec */
+    // #nosec
     let mut s = String::new();
     s.push_str(
         format!(

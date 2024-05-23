@@ -7,32 +7,30 @@ fn test_channel_number_string() -> Result<(), stun::Error> {
     Ok(())
 }
 
-/*
-#[test]
-fn test_channel_number_NoAlloc() -> Result<(), stun::Error> {
-    let mut m = Message::default();
-
-        if wasAllocs(func() {
-            // Case with ChannelNumber on stack.
-            n: = ChannelNumber(6)
-            n.AddTo(m) //nolint
-            m.Reset()
-        }) {
-        t.Error("Unexpected allocations")
-    }
-
-        n: = ChannelNumber(12)
-        nP: = &n
-        if wasAllocs(func() {
-            // On heap.
-            nP.AddTo(m) //nolint
-            m.Reset()
-        }) {
-        t.Error("Unexpected allocations")
-    }
-    Ok(())
-}
-*/
+// #[test]
+// fn test_channel_number_NoAlloc() -> Result<(), stun::Error> {
+// let mut m = Message::default();
+//
+// if wasAllocs(func() {
+// Case with ChannelNumber on stack.
+// n: = ChannelNumber(6)
+// n.AddTo(m) //nolint
+// m.Reset()
+// }) {
+// t.Error("Unexpected allocations")
+// }
+//
+// n: = ChannelNumber(12)
+// nP: = &n
+// if wasAllocs(func() {
+// On heap.
+// nP.AddTo(m) //nolint
+// m.Reset()
+// }) {
+// t.Error("Unexpected allocations")
+// }
+// Ok(())
+// }
 
 #[test]
 fn test_channel_number_add_to() -> Result<(), stun::Error> {

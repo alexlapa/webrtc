@@ -3,9 +3,7 @@ mod evenport_test;
 
 use std::fmt;
 
-use stun::attributes::*;
-use stun::checks::*;
-use stun::message::*;
+use crate::stun::{self, attributes::*, checks::*, message::*};
 
 /// `EvenPort` represents `EVEN-PORT` attribute.
 ///
@@ -33,7 +31,7 @@ impl fmt::Display for EvenPort {
 }
 
 const EVEN_PORT_SIZE: usize = 1;
-const FIRST_BIT_SET: u8 = 0b10000000; //FIXME? (1 << 8) - 1;
+const FIRST_BIT_SET: u8 = 0b10000000; // FIXME? (1 << 8) - 1;
 
 impl Setter for EvenPort {
     /// Adds `EVEN-PORT` to message.

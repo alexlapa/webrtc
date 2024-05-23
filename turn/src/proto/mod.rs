@@ -16,7 +16,7 @@ pub mod rsrvtoken;
 
 use std::fmt;
 
-use stun::message::*;
+use crate::stun::{self, message::*};
 
 // proto implements RFC 5766 Traversal Using Relays around NAT.
 
@@ -26,6 +26,7 @@ pub struct Protocol(pub u8);
 
 /// `PROTO_TCP` is IANA assigned protocol number for TCP.
 pub const PROTO_TCP: Protocol = Protocol(6);
+
 /// `PROTO_UDP` is IANA assigned protocol number for UDP.
 pub const PROTO_UDP: Protocol = Protocol(17);
 
@@ -46,6 +47,7 @@ impl fmt::Display for Protocol {
 
 /// `DEFAULT_PORT` for TURN is same as STUN.
 pub const DEFAULT_PORT: u16 = stun::DEFAULT_PORT;
+
 /// `DEFAULT_TLSPORT` is for TURN over TLS and is same as STUN.
 pub const DEFAULT_TLS_PORT: u16 = stun::DEFAULT_TLS_PORT;
 

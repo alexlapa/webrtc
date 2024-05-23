@@ -4,23 +4,28 @@ mod server_test;
 pub mod config;
 pub mod request;
 
-use std::collections::HashMap;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
+use crate::util::Conn;
 use config::*;
 use request::*;
-use tokio::sync::broadcast::error::RecvError;
-use tokio::sync::broadcast::{self};
-use tokio::sync::{mpsc, oneshot, Mutex};
-use tokio::time::{Duration, Instant};
-use util::Conn;
+use tokio::{
+    sync::{
+        broadcast::{
+            error::RecvError,
+            {self},
+        },
+        mpsc, oneshot, Mutex,
+    },
+    time::{Duration, Instant},
+};
 
-use crate::allocation::allocation_manager::*;
-use crate::allocation::five_tuple::FiveTuple;
-use crate::allocation::AllocationInfo;
-use crate::auth::AuthHandler;
-use crate::error::*;
-use crate::proto::lifetime::DEFAULT_LIFETIME;
+use crate::{
+    allocation::{allocation_manager::*, five_tuple::FiveTuple, AllocationInfo},
+    auth::AuthHandler,
+    error::*,
+    proto::lifetime::DEFAULT_LIFETIME,
+};
 
 const INBOUND_MTU: usize = 1500;
 
@@ -51,7 +56,7 @@ impl Server {
             s.channel_bind_timeout = DEFAULT_LIFETIME;
         }
 
-        for p in config.conn_configs.into_iter() {
+        for p in config.conn_configs {
             let nonces = Arc::clone(&s.nonces);
             let auth_handler = Arc::clone(&s.auth_handler);
             let realm = s.realm.clone();
@@ -77,7 +82,8 @@ impl Server {
         Ok(s)
     }
 
-    /// Deletes all existing [`Allocation`][`Allocation`]s by the provided `username`.
+    /// Deletes all existing [`Allocation`][`Allocation`]s by the provided
+    /// `username`.
     ///
     /// [`Allocation`]: crate::allocation::Allocation
     pub async fn delete_allocations_by_username(&self, username: String) -> Result<()> {
@@ -98,14 +104,15 @@ impl Server {
         }
     }
 
-    /// Get information of [`Allocation`][`Allocation`]s by specified [`FiveTuple`]s.
+    /// Get information of [`Allocation`][`Allocation`]s by specified
+    /// [`FiveTuple`]s.
     ///
     /// If `five_tuples` is:
     /// - [`None`]:               It returns information about the all
-    ///                           [`Allocation`][`Allocation`]s.
-    /// - [`Some`] and not empty: It returns information about
-    ///                           the [`Allocation`][`Allocation`]s associated with
-    ///                           the specified [`FiveTuples`].
+    ///   [`Allocation`][`Allocation`]s.
+    /// - [`Some`] and not empty: It returns information about the
+    ///   [`Allocation`][`Allocation`]s associated with the specified
+    ///   [`FiveTuples`].
     /// - [`Some`], but empty:    It returns an empty [`HashMap`].
     ///
     /// [`Allocation`]: crate::allocation::Allocation
@@ -218,7 +225,8 @@ impl Server {
         let _ = conn.close().await;
     }
 
-    /// Close stops the TURN Server. It cleans up any associated state and closes all connections it is managing.
+    /// Close stops the TURN Server. It cleans up any associated state and
+    /// closes all connections it is managing.
     pub async fn close(&self) -> Result<()> {
         let tx = {
             let mut command_tx = self.command_tx.lock().await;
@@ -248,7 +256,8 @@ enum Command {
     /// [`Allocation`]: `crate::allocation::Allocation`
     DeleteAllocations(String, Arc<mpsc::Receiver<()>>),
 
-    /// Command to get information of [`Allocation`][`Allocation`]s by provided [`FiveTuple`]s.
+    /// Command to get information of [`Allocation`][`Allocation`]s by provided
+    /// [`FiveTuple`]s.
     ///
     /// [`Allocation`]: `crate::allocation::Allocation`
     GetAllocationsInfo(

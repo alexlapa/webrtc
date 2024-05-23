@@ -3,16 +3,14 @@ mod reqfamily_test;
 
 use std::fmt;
 
-use stun::attributes::*;
-use stun::checks::*;
-use stun::message::*;
+use crate::stun::{self, attributes::*, checks::*, message::*};
 
 // Values for RequestedAddressFamily as defined in RFC 6156 Section 4.1.1.
 pub const REQUESTED_FAMILY_IPV4: RequestedAddressFamily = RequestedAddressFamily(0x01);
 pub const REQUESTED_FAMILY_IPV6: RequestedAddressFamily = RequestedAddressFamily(0x02);
 
-/// `RequestedAddressFamily` represents the `REQUESTED-ADDRESS-FAMILY` Attribute as
-/// defined in [RFC 6156 Section 4.1.1](https://www.rfc-editor.org/rfc/rfc6156#section-4.1.1).
+/// `RequestedAddressFamily` represents the `REQUESTED-ADDRESS-FAMILY` Attribute
+/// as defined in [RFC 6156 Section 4.1.1](https://www.rfc-editor.org/rfc/rfc6156#section-4.1.1).
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct RequestedAddressFamily(pub u8);
 

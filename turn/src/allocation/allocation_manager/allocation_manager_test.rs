@@ -1,21 +1,26 @@
-use std::net::{IpAddr, Ipv4Addr};
-use std::str::FromStr;
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    str::FromStr,
+};
 
-use stun::attributes::ATTR_USERNAME;
-use stun::textattrs::TextAttribute;
-use tokio::net::UdpSocket;
-use tokio::sync::mpsc::Sender;
-use util::vnet::net::*;
+use crate::{
+    stun::{attributes::ATTR_USERNAME, textattrs::TextAttribute},
+    util::vnet::net::*,
+};
+use tokio::{net::UdpSocket, sync::mpsc::Sender};
 
 use super::*;
-use crate::auth::{generate_auth_key, AuthHandler};
-use crate::client::{Client, ClientConfig};
-use crate::error::Result;
-use crate::proto::lifetime::DEFAULT_LIFETIME;
-use crate::relay::relay_none::*;
-use crate::relay::relay_static::RelayAddressGeneratorStatic;
-use crate::server::config::{ConnConfig, ServerConfig};
-use crate::server::Server;
+use crate::{
+    auth::{generate_auth_key, AuthHandler},
+    client::{Client, ClientConfig},
+    error::Result,
+    proto::lifetime::DEFAULT_LIFETIME,
+    relay::RelayAddressGeneratorStatic,
+    server::{
+        config::{ConnConfig, ServerConfig},
+        Server,
+    },
+};
 
 fn new_test_manager() -> Manager {
     let config = ManagerConfig {
@@ -29,7 +34,7 @@ fn new_test_manager() -> Manager {
 }
 
 fn random_five_tuple() -> FiveTuple {
-    /* #nosec */
+    // #nosec
     FiveTuple {
         src_addr: SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), rand::random()),
         dst_addr: SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), rand::random()),
@@ -39,7 +44,7 @@ fn random_five_tuple() -> FiveTuple {
 
 #[tokio::test]
 async fn test_packet_handler() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     // turn server initialization
     let turn_socket = UdpSocket::bind("127.0.0.1:0").await?;
@@ -163,7 +168,7 @@ async fn test_packet_handler() -> Result<()> {
 
 #[tokio::test]
 async fn test_create_allocation_duplicate_five_tuple() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     // turn server initialization
     let turn_socket: Arc<dyn Conn + Send + Sync> = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
@@ -200,7 +205,7 @@ async fn test_create_allocation_duplicate_five_tuple() -> Result<()> {
 
 #[tokio::test]
 async fn test_delete_allocation() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     // turn server initialization
     let turn_socket: Arc<dyn Conn + Send + Sync> = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
@@ -237,7 +242,7 @@ async fn test_delete_allocation() -> Result<()> {
 
 #[tokio::test]
 async fn test_allocation_timeout() -> Result<()> {
-    //env_logger::init();
+    // env_logger::init();
 
     // turn server initialization
     let turn_socket: Arc<dyn Conn + Send + Sync> = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);

@@ -1,18 +1,19 @@
-use std::collections::HashMap;
-use std::net::{IpAddr, SocketAddr};
-use std::str::FromStr;
-use std::sync::Arc;
+use std::{
+    collections::HashMap,
+    net::{IpAddr, SocketAddr},
+    str::FromStr,
+    sync::Arc,
+};
 
 use clap::{App, AppSettings, Arg};
-use tokio::net::UdpSocket;
-use tokio::signal;
-use tokio::time::Duration;
-use turn::auth::*;
-use turn::relay::relay_static::*;
-use turn::server::config::*;
-use turn::server::*;
-use turn::Error;
-use util::vnet::net::*;
+use tokio::{net::UdpSocket, time::Duration};
+use turn::{
+    auth::*,
+    relay::RelayAddressGeneratorRanges,
+    server::{config::*, *},
+    util::vnet::net::*,
+    Error,
+};
 
 struct MyAuthHandler {
     cred_map: HashMap<String, Vec<u8>>,
@@ -32,7 +33,7 @@ impl AuthHandler for MyAuthHandler {
         _src_addr: SocketAddr,
     ) -> Result<Vec<u8>, Error> {
         if let Some(pw) = self.cred_map.get(username) {
-            //log::debug!("username={}, password={:?}", username, pw);
+            // log::debug!("username={}, password={:?}", username, pw);
             Ok(pw.to_vec())
         } else {
             Err(Error::ErrFakeErr)
@@ -40,7 +41,8 @@ impl AuthHandler for MyAuthHandler {
     }
 }
 
-// RUST_LOG=trace cargo run --color=always --package turn --example turn_server_udp -- --public-ip 0.0.0.0 --users user=pass
+// RUST_LOG=trace cargo run --color=always --package turn --example
+// turn_server_udp -- --public-ip 0.0.0.0 --users user=pass
 
 #[tokio::main]
 async fn main() -> Result<(), Error> {
@@ -99,7 +101,8 @@ async fn main() -> Result<(), Error> {
     let realm = matches.value_of("realm").unwrap();
 
     // Cache -users flag for easy lookup later
-    // If passwords are stored they should be saved to your DB hashed using turn.GenerateAuthKey
+    // If passwords are stored they should be saved to your DB hashed using
+    // turn.GenerateAuthKey
     let creds: Vec<&str> = users.split(',').collect();
     let mut cred_map = HashMap::new();
     for user in creds {
@@ -109,16 +112,19 @@ async fn main() -> Result<(), Error> {
     }
 
     // Create a UDP listener to pass into pion/turn
-    // turn itself doesn't allocate any UDP sockets, but lets the user pass them in
-    // this allows us to add logging, storage or modify inbound/outbound traffic
+    // turn itself doesn't allocate any UDP sockets, but lets the user pass them
+    // in this allows us to add logging, storage or modify inbound/outbound
+    // traffic
     let conn = Arc::new(UdpSocket::bind(format!("0.0.0.0:{port}")).await?);
     println!("listening {}...", conn.local_addr()?);
-
     let server = Server::new(ServerConfig {
         conn_configs: vec![ConnConfig {
             conn,
-            relay_addr_generator: Box::new(RelayAddressGeneratorStatic {
+            relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
                 relay_address: IpAddr::from_str(public_ip)?,
+                min_port: 49152,
+                max_port: 65535,
+                max_retries: 5,
                 address: "0.0.0.0".to_owned(),
                 net: Arc::new(Net::new(None)),
             }),
@@ -131,7 +137,7 @@ async fn main() -> Result<(), Error> {
     .await?;
 
     println!("Waiting for Ctrl-C...");
-    signal::ctrl_c().await.expect("failed to listen for event");
+    // signal::ctrl_c().await.expect("failed to listen for event");
     println!("\nClosing connection now...");
     server.close().await?;
 

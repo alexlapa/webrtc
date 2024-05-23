@@ -1,8 +1,7 @@
 #[cfg(test)]
 mod data_test;
 
-use stun::attributes::*;
-use stun::message::*;
+use crate::stun::{self, attributes::*, message::*};
 
 /// `Data` represents `DATA` attribute.
 ///
