@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{io, net, num::ParseIntError, string::FromUtf8Error};
 
 use thiserror::Error;

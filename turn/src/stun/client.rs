@@ -82,7 +82,6 @@ impl Collector for TickerCollector {
 pub struct ClientTransaction {
     id: TransactionId,
     attempt: u32,
-    calls: u32,
     handler: Handler,
     start: Instant,
     rto: Duration,
@@ -90,16 +89,6 @@ pub struct ClientTransaction {
 }
 
 impl ClientTransaction {
-    pub(crate) fn handle(&mut self, e: Event) -> Result<()> {
-        self.calls += 1;
-        if self.calls == 1 {
-            if let Some(handler) = &self.handler {
-                handler.send(e)?;
-            }
-        }
-        Ok(())
-    }
-
     pub(crate) fn next_timeout(&self, now: Instant) -> Instant {
         now.add((self.attempt + 1) * self.rto)
     }
@@ -439,7 +428,6 @@ impl Client {
             let t = ClientTransaction {
                 id: m.transaction_id,
                 attempt: 0,
-                calls: 0,
                 handler,
                 start: Instant::now(),
                 rto: self.settings.rto,

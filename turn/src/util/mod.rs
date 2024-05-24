@@ -3,10 +3,6 @@ use std::io;
 use async_trait::async_trait;
 use thiserror::Error;
 
-#[cfg(target_family = "windows")]
-#[macro_use]
-extern crate bitflags;
-
 pub mod fixed_big_int;
 pub mod replay_detector;
 
@@ -60,13 +56,8 @@ pub mod ifaces;
 
 pub mod vnet;
 
-#[cfg(feature = "marshal")]
-pub mod marshal;
-
-#[cfg(feature = "marshal")]
-pub use crate::marshal::{exact_size_buf::ExactSizeBuf, Marshal, MarshalSize, Unmarshal};
-
 mod error;
+
 pub use error::{Error, Result};
 
 pub use buffer::Buffer;

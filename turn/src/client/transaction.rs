@@ -2,11 +2,13 @@ use std::{
     collections::HashMap,
     net::{IpAddr, Ipv4Addr, SocketAddr},
     str::FromStr,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU16, Ordering},
+        Arc,
+    },
 };
 
 use crate::{stun::message::*, util::Conn};
-use portable_atomic::AtomicU16;
 use tokio::{
     sync::{mpsc, Mutex},
     time::Duration,

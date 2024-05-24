@@ -1,6 +1,5 @@
 use std::sync::{atomic::Ordering, Arc};
 
-use portable_atomic::AtomicBool;
 use tokio::{
     sync::Mutex,
     time::{Duration, Instant},

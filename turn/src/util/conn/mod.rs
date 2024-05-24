@@ -1,20 +1,4 @@
-pub mod conn_bridge;
-pub mod conn_disconnected_packet;
-pub mod conn_pipe;
 pub mod conn_udp;
-pub mod conn_udp_listener;
-
-#[cfg(test)]
-mod conn_bridge_test;
-#[cfg(test)]
-mod conn_pipe_test;
-#[cfg(test)]
-mod conn_test;
-
-// TODO: remove this conditional test
-#[cfg(not(target_os = "windows"))]
-#[cfg(test)]
-mod conn_udp_listener_test;
 
 use std::{net::SocketAddr, sync::Arc};
 
@@ -69,4 +53,30 @@ where
         ),
     )
     .into())
+}
+
+#[cfg(test)]
+mod conn_test {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_conn_lookup_host() -> Result<()> {
+        let stun_serv_addr = "stun1.l.google.com:19302";
+
+        if let Ok(ipv4_addr) = lookup_host(true, stun_serv_addr).await {
+            assert!(
+                ipv4_addr.is_ipv4(),
+                "expected ipv4 but got ipv6: {ipv4_addr}"
+            );
+        }
+
+        if let Ok(ipv6_addr) = lookup_host(false, stun_serv_addr).await {
+            assert!(
+                ipv6_addr.is_ipv6(),
+                "expected ipv6 but got ipv4: {ipv6_addr}"
+            );
+        }
+
+        Ok(())
+    }
 }

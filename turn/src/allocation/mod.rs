@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod allocation_test;
-
 pub mod allocation_manager;
 pub mod channel_bind;
 pub mod five_tuple;
@@ -10,7 +7,10 @@ use std::{
     collections::HashMap,
     marker::{Send, Sync},
     net::SocketAddr,
-    sync::{atomic::Ordering, Arc, Mutex as SyncMutex},
+    sync::{
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+        Arc, Mutex as SyncMutex,
+    },
 };
 
 use crate::{
@@ -20,7 +20,6 @@ use crate::{
 use channel_bind::*;
 use five_tuple::*;
 use permission::*;
-use portable_atomic::{AtomicBool, AtomicUsize};
 use tokio::{
     sync::{
         mpsc,
@@ -32,7 +31,7 @@ use tokio::{
 
 use crate::{
     error::*,
-    proto::{chandata::*, channum::*, data::*, peeraddr::*, *},
+    proto::{chandata::*, channum::*, data::*, peeraddr::*},
 };
 
 const RTP_MTU: usize = 1500;
@@ -49,21 +48,15 @@ pub struct AllocationInfo {
     pub username: String,
 
     /// Relayed bytes with this [`Allocation`].
-    #[cfg(feature = "metrics")]
     pub relayed_bytes: usize,
 }
 
 impl AllocationInfo {
     /// Creates a new [`AllocationInfo`].
-    pub fn new(
-        five_tuple: FiveTuple,
-        username: String,
-        #[cfg(feature = "metrics")] relayed_bytes: usize,
-    ) -> Self {
+    pub fn new(five_tuple: FiveTuple, username: String, relayed_bytes: usize) -> Self {
         Self {
             five_tuple,
             username,
-            #[cfg(feature = "metrics")]
             relayed_bytes,
         }
     }
@@ -72,7 +65,6 @@ impl AllocationInfo {
 /// `Allocation` is tied to a FiveTuple and relays traffic
 /// use create_allocation and get_allocation to operate.
 pub struct Allocation {
-    protocol: Protocol,
     turn_socket: Arc<dyn Conn + Send + Sync>,
     pub(crate) relay_addr: SocketAddr,
     pub(crate) relay_socket: Arc<dyn Conn + Send + Sync>,
@@ -104,7 +96,6 @@ impl Allocation {
         alloc_close_notify: Option<mpsc::Sender<AllocationInfo>>,
     ) -> Self {
         Allocation {
-            protocol: PROTO_UDP,
             turn_socket,
             relay_addr,
             relay_socket,
@@ -257,7 +248,6 @@ impl Allocation {
                 .send(AllocationInfo {
                     five_tuple: self.five_tuple,
                     username: self.username.text.clone(),
-                    #[cfg(feature = "metrics")]
                     relayed_bytes: self.relayed_bytes.load(Ordering::Acquire),
                 })
                 .await;
@@ -469,5 +459,304 @@ impl Allocation {
                 }
             }
         });
+    }
+}
+
+#[cfg(test)]
+mod allocation_test {
+    use std::str::FromStr;
+
+    use crate::stun::{attributes::ATTR_USERNAME, textattrs::TextAttribute};
+    use tokio::net::UdpSocket;
+
+    use super::*;
+    use crate::proto::lifetime::DEFAULT_LIFETIME;
+
+    #[tokio::test]
+    async fn test_has_permission() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr1 = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
+        let addr3 = SocketAddr::from_str("127.0.0.2:3478")?;
+
+        let p1 = Permission::new(addr1);
+        let p2 = Permission::new(addr2);
+        let p3 = Permission::new(addr3);
+
+        a.add_permission(p1).await;
+        a.add_permission(p2).await;
+        a.add_permission(p3).await;
+
+        let found_p1 = a.has_permission(&addr1).await;
+        assert!(found_p1, "Should keep the first one.");
+
+        let found_p2 = a.has_permission(&addr2).await;
+        assert!(found_p2, "Second one should be ignored.");
+
+        let found_p3 = a.has_permission(&addr3).await;
+        assert!(found_p3, "Permission with another IP should be found");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_add_permission() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let p = Permission::new(addr);
+        a.add_permission(p).await;
+
+        let found_p = a.has_permission(&addr).await;
+        assert!(found_p, "Should keep the first one.");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_permission() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+
+        let p = Permission::new(addr);
+        a.add_permission(p).await;
+
+        let found_p = a.has_permission(&addr).await;
+        assert!(found_p, "Should keep the first one.");
+
+        a.remove_permission(&addr).await;
+
+        let found_permission = a.has_permission(&addr).await;
+        assert!(
+            !found_permission,
+            "Got permission should be nil after removed."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_add_channel_bind() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
+
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+
+        let c2 = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER + 1), addr);
+        let result = a.add_channel_bind(c2, DEFAULT_LIFETIME).await;
+        assert!(
+            result.is_err(),
+            "should failed with conflicted peer address"
+        );
+
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
+        let c3 = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr2);
+        let result = a.add_channel_bind(c3, DEFAULT_LIFETIME).await;
+        assert!(result.is_err(), "should fail with conflicted number.");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_channel_by_number() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
+
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+
+        let exist_channel_addr = a
+            .get_channel_addr(&ChannelNumber(MIN_CHANNEL_NUMBER))
+            .await
+            .unwrap();
+        assert_eq!(addr, exist_channel_addr);
+
+        let not_exist_channel = a
+            .get_channel_addr(&ChannelNumber(MIN_CHANNEL_NUMBER + 1))
+            .await;
+        assert!(
+            not_exist_channel.is_none(),
+            "should be nil for not existed channel."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_get_channel_by_addr() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
+        let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
+
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+
+        let exist_channel_number = a.get_channel_number(&addr).await.unwrap();
+        assert_eq!(ChannelNumber(MIN_CHANNEL_NUMBER), exist_channel_number);
+
+        let not_exist_channel = a.get_channel_number(&addr2).await;
+        assert!(
+            not_exist_channel.is_none(),
+            "should be nil for not existed channel."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_remove_channel_bind() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let number = ChannelNumber(MIN_CHANNEL_NUMBER);
+        let c = ChannelBind::new(number, addr);
+
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+
+        a.remove_channel_bind(number).await;
+
+        let not_exist_channel = a.get_channel_addr(&number).await;
+        assert!(
+            not_exist_channel.is_none(),
+            "should be nil for not existed channel."
+        );
+
+        let not_exist_channel = a.get_channel_number(&addr).await;
+        assert!(
+            not_exist_channel.is_none(),
+            "should be nil for not existed channel."
+        );
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_allocation_refresh() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        a.start(DEFAULT_LIFETIME).await;
+        a.refresh(Duration::from_secs(0)).await;
+
+        assert!(!a.stop(), "lifetimeTimer has expired");
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_allocation_close() -> Result<()> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        // add mock lifetimeTimer
+        a.start(DEFAULT_LIFETIME).await;
+
+        // add channel
+        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let number = ChannelNumber(MIN_CHANNEL_NUMBER);
+        let c = ChannelBind::new(number, addr);
+
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+
+        // add permission
+        a.add_permission(Permission::new(addr)).await;
+
+        a.close().await?;
+
+        Ok(())
     }
 }

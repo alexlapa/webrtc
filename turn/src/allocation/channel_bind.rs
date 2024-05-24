@@ -1,9 +1,5 @@
-#[cfg(test)]
-mod channel_bind_test;
-
 use std::sync::{atomic::Ordering, Arc};
 
-use portable_atomic::AtomicBool;
 use tokio::{
     sync::Mutex,
     time::{Duration, Instant},
@@ -84,5 +80,51 @@ impl ChannelBind {
         if let Some(tx) = &self.reset_tx {
             let _ = tx.send(lifetime).await;
         }
+    }
+}
+
+#[cfg(test)]
+mod channel_bind_test {
+    use std::net::Ipv4Addr;
+
+    use crate::stun::{attributes::ATTR_USERNAME, textattrs::TextAttribute};
+    use tokio::net::UdpSocket;
+
+    use super::*;
+    use crate::error::Result;
+
+    async fn create_channel_bind(lifetime: Duration) -> Result<Allocation> {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let relay_socket = Arc::clone(&turn_socket);
+        let relay_addr = relay_socket.local_addr()?;
+        let a = Allocation::new(
+            turn_socket,
+            relay_socket,
+            relay_addr,
+            FiveTuple::default(),
+            TextAttribute::new(ATTR_USERNAME, "user".into()),
+            None,
+        );
+
+        let addr = SocketAddr::new(Ipv4Addr::new(0, 0, 0, 0).into(), 0);
+        let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
+
+        a.add_channel_bind(c, lifetime).await?;
+
+        Ok(a)
+    }
+
+    #[tokio::test]
+    async fn test_channel_bind() -> Result<()> {
+        let a = create_channel_bind(Duration::from_millis(20)).await?;
+
+        let result = a.get_channel_addr(&ChannelNumber(MIN_CHANNEL_NUMBER)).await;
+        if let Some(addr) = result {
+            assert_eq!(addr.ip().to_string(), "0.0.0.0");
+        } else {
+            panic!("expected some, but got none");
+        }
+
+        Ok(())
     }
 }

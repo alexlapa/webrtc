@@ -1,39 +1,9 @@
 use std::{
-    fmt, mem,
+    fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
 use crate::stun::{addr::*, attributes::*, checks::*, error::*, message::*};
-
-const WORD_SIZE: usize = mem::size_of::<usize>();
-
-// var supportsUnaligned = runtime.GOARCH == "386" || runtime.GOARCH == "amd64"
-// // nolint:gochecknoglobals
-
-// fast_xor_bytes xors in bulk. It only works on architectures that
-// support unaligned read/writes.
-// TODO: fn fast_xor_bytes(dst:&[u8], a:&[u8], b:&[u8]) ->usize {
-// let mut n = a.len();
-// if b.len() < n {
-// n = b.len();
-// }
-//
-// let w = n / WORD_SIZE;
-// if w > 0 {
-// let dw = *(*[]uintptr)(unsafe.Pointer(&dst))
-// let aw = *(*[]uintptr)(unsafe.Pointer(&a))
-// let bw = *(*[]uintptr)(unsafe.Pointer(&b))
-// for i := 0; i < w; i++ {
-// dw[i] = aw[i] ^ bw[i]
-// }
-// }
-//
-// for i := n - n%WORD_SIZE; i < n; i++ {
-// dst[i] = a[i] ^ b[i]
-// }
-//
-// return n
-// }
 
 fn safe_xor_bytes(dst: &mut [u8], a: &[u8], b: &[u8]) -> usize {
     let mut n = a.len();

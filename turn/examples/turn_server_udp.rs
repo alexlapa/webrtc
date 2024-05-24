@@ -126,7 +126,7 @@ async fn main() -> Result<(), Error> {
                 max_port: 65535,
                 max_retries: 5,
                 address: "0.0.0.0".to_owned(),
-                net: Arc::new(Net::new(None)),
+                net: Arc::new(Net::new()),
             }),
         }],
         realm: realm.to_owned(),

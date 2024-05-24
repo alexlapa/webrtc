@@ -1,6 +1,3 @@
-#[cfg(test)]
-mod server_test;
-
 pub mod config;
 pub mod request;
 
@@ -166,10 +163,11 @@ impl Server {
             async move {
                 loop {
                     match handle_rx.recv().await {
-                        Ok(Command::DeleteAllocations(name, _)) => {
+                        Ok(Command::DeleteAllocations(name, completion)) => {
                             allocation_manager
                                 .delete_allocations_by_username(name.as_str())
                                 .await;
+                            drop(completion);
                             continue;
                         }
                         Ok(Command::GetAllocationsInfo(five_tuples, tx)) => {
@@ -178,8 +176,13 @@ impl Server {
 
                             continue;
                         }
-                        Err(RecvError::Closed) | Ok(Command::Close(_)) => {
+                        Err(RecvError::Closed) => {
                             close_rx.close();
+                            break;
+                        }
+                        Ok(Command::Close(completion)) => {
+                            close_rx.close();
+                            drop(completion);
                             break;
                         }
                         Err(RecvError::Lagged(n)) => {
@@ -267,4 +270,105 @@ enum Command {
 
     /// Command to close the [`Server`].
     Close(Arc<mpsc::Receiver<()>>),
+}
+
+#[cfg(test)]
+mod server_test {
+    use std::{
+        net::{IpAddr, SocketAddr},
+        str::FromStr,
+    };
+
+    use crate::util::vnet::*;
+    use tokio::net::UdpSocket;
+
+    use super::{config::*, *};
+    use crate::{auth::generate_auth_key, client::*, relay::*};
+
+    struct TestAuthHandler {
+        cred_map: HashMap<String, Vec<u8>>,
+    }
+
+    impl TestAuthHandler {
+        fn new() -> Self {
+            let mut cred_map = HashMap::new();
+            cred_map.insert(
+                "user".to_owned(),
+                generate_auth_key("user", "webrtc.rs", "pass"),
+            );
+
+            TestAuthHandler { cred_map }
+        }
+    }
+
+    impl AuthHandler for TestAuthHandler {
+        fn auth_handle(
+            &self,
+            username: &str,
+            _realm: &str,
+            _src_addr: SocketAddr,
+        ) -> Result<Vec<u8>> {
+            if let Some(pw) = self.cred_map.get(username) {
+                Ok(pw.to_vec())
+            } else {
+                Err(Error::ErrFakeErr)
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn test_server_simple() -> Result<()> {
+        // here, it should use static port, like "0.0.0.0:3478",
+        // but, due to different test environment, let's fake it by using
+        // "0.0.0.0:0" to auto assign a "static" port
+        let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+        let server_port = conn.local_addr()?.port();
+
+        let server = Server::new(ServerConfig {
+            conn_configs: vec![ConnConfig {
+                conn,
+                relay_addr_generator: Box::new(RelayAddressGeneratorStatic {
+                    relay_address: IpAddr::from_str("127.0.0.1")?,
+                    address: "0.0.0.0".to_owned(),
+                    net: Arc::new(net::Net::new()),
+                }),
+            }],
+            realm: "webrtc.rs".to_owned(),
+            auth_handler: Arc::new(TestAuthHandler::new()),
+            channel_bind_timeout: Duration::from_secs(0),
+            alloc_close_notify: None,
+        })
+        .await?;
+
+        assert_eq!(
+            DEFAULT_LIFETIME, server.channel_bind_timeout,
+            "should match"
+        );
+
+        let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+
+        let client = Client::new(ClientConfig {
+            stun_serv_addr: String::new(),
+            turn_serv_addr: String::new(),
+            username: String::new(),
+            password: String::new(),
+            realm: String::new(),
+            software: String::new(),
+            rto_in_ms: 0,
+            conn,
+            vnet: None,
+        })
+        .await?;
+
+        client.listen().await?;
+
+        client
+            .send_binding_request_to(format!("127.0.0.1:{server_port}").as_str())
+            .await?;
+
+        client.close().await?;
+        server.close().await?;
+
+        Ok(())
+    }
 }

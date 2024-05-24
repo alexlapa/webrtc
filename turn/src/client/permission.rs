@@ -1,10 +1,11 @@
 use std::{
     collections::HashMap,
     net::SocketAddr,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicU8, Ordering},
+        Arc,
+    },
 };
-
-use portable_atomic::AtomicU8;
 
 #[derive(Default, Copy, Clone, PartialEq, Debug)]
 pub(crate) enum PermState {
