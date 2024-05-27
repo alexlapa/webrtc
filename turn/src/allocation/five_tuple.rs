@@ -47,10 +47,9 @@ impl fmt::Debug for FiveTuple {
 #[cfg(test)]
 mod five_tuple_test {
     use super::*;
-    use crate::error::Result;
 
     #[test]
-    fn test_five_tuple_protocol() -> Result<()> {
+    fn test_five_tuple_protocol() {
         let udp_expect = PROTO_UDP;
         let tcp_expect = PROTO_TCP;
 
@@ -65,17 +64,15 @@ mod five_tuple_test {
 
         assert_eq!(udp_expect.to_string(), "UDP");
         assert_eq!(tcp_expect.to_string(), "TCP");
-
-        Ok(())
     }
 
     #[test]
-    fn test_five_tuple_equal() -> Result<()> {
-        let src_addr1: SocketAddr = "0.0.0.0:3478".parse::<SocketAddr>()?;
-        let src_addr2: SocketAddr = "0.0.0.0:3479".parse::<SocketAddr>()?;
+    fn test_five_tuple_equal() {
+        let src_addr1: SocketAddr = "0.0.0.0:3478".parse::<SocketAddr>().unwrap();
+        let src_addr2: SocketAddr = "0.0.0.0:3479".parse::<SocketAddr>().unwrap();
 
-        let dst_addr1: SocketAddr = "0.0.0.0:3480".parse::<SocketAddr>()?;
-        let dst_addr2: SocketAddr = "0.0.0.0:3481".parse::<SocketAddr>()?;
+        let dst_addr1: SocketAddr = "0.0.0.0:3480".parse::<SocketAddr>().unwrap();
+        let dst_addr2: SocketAddr = "0.0.0.0:3481".parse::<SocketAddr>().unwrap();
 
         let tests = vec![
             (
@@ -143,7 +140,5 @@ mod five_tuple_test {
                 "{name}: {a}, {b} equal check should be {expect}, but {fact}"
             );
         }
-
-        Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::stun::{self, attributes::*, message::*};
+use crate::stun::{self, attrs::*, msg::*};
 
 /// `DontFragmentAttr` represents `DONT-FRAGMENT` attribute.
 #[derive(Debug, Default, PartialEq, Eq)]

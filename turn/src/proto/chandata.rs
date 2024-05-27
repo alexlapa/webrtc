@@ -51,7 +51,7 @@ impl ChannelData {
     }
 
     /// Decodes this from [`Self::raw`].
-    pub fn decode(&mut self) -> Result<()> {
+    pub fn decode(&mut self) -> Result<(), Error> {
         let buf = &self.raw;
         if buf.len() < CHANNEL_DATA_HEADER_SIZE {
             return Err(Error::ErrUnexpectedEof);
@@ -111,7 +111,7 @@ mod chandata_test {
     use super::*;
 
     #[test]
-    fn test_channel_data_encode() -> Result<()> {
+    fn test_channel_data_encode() {
         let mut d = ChannelData {
             data: vec![1, 2, 3, 4],
             number: ChannelNumber(MIN_CHANNEL_NUMBER + 1),
@@ -121,7 +121,7 @@ mod chandata_test {
 
         let mut b = ChannelData::default();
         b.raw.extend_from_slice(&d.raw);
-        b.decode()?;
+        b.decode().unwrap();
 
         assert_eq!(b, d, "not equal");
 
@@ -129,12 +129,10 @@ mod chandata_test {
             ChannelData::is_channel_data(&b.raw) && ChannelData::is_channel_data(&d.raw),
             "unexpected IsChannelData"
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_channel_data_equal() -> Result<()> {
+    fn test_channel_data_equal() {
         let tests = vec![
             (
                 "equal",
@@ -198,12 +196,10 @@ mod chandata_test {
             let v = a == b;
             assert_eq!(v, r, "unexpected: ({name}) {r} != {r}");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_channel_data_decode() -> Result<()> {
+    fn test_channel_data_decode() {
         let tests = vec![
             ("small", vec![1, 2, 3], Error::ErrUnexpectedEof),
             (
@@ -234,12 +230,10 @@ mod chandata_test {
                 panic!("expected error, but got ok");
             }
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_channel_data_reset() -> Result<()> {
+    fn test_channel_data_reset() {
         let mut d = ChannelData {
             data: vec![1, 2, 3, 4],
             number: ChannelNumber(MIN_CHANNEL_NUMBER + 1),
@@ -250,13 +244,11 @@ mod chandata_test {
         buf.copy_from_slice(&d.raw);
         d.reset();
         d.raw = buf;
-        d.decode()?;
-
-        Ok(())
+        d.decode().unwrap();
     }
 
     #[test]
-    fn test_is_channel_data() -> Result<()> {
+    fn test_is_channel_data() {
         let tests = vec![
             ("small", vec![1, 2, 3, 4], false),
             ("zeroes", vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], false),
@@ -266,8 +258,6 @@ mod chandata_test {
             let v = ChannelData::is_channel_data(&buf);
             assert_eq!(v, r, "unexpected: ({name}) {r} != {v}");
         }
-
-        Ok(())
     }
 
     #[rustfmt::skip]
@@ -277,7 +267,7 @@ mod chandata_test {
     ];
 
     #[test]
-    fn test_chrome_channel_data() -> Result<()> {
+    fn test_chrome_channel_data() {
         let mut data = vec![];
         let mut messages = vec![];
 
@@ -285,7 +275,7 @@ mod chandata_test {
         for h in &CHANDATA_TEST_HEX {
             let b = match hex::decode(h) {
                 Ok(b) => b,
-                Err(_) => return Err(Error::Other("hex decode error".to_owned())),
+                Err(_) => panic!("hex decode error"),
             };
             data.push(b);
         }
@@ -298,7 +288,7 @@ mod chandata_test {
                 ..Default::default()
             };
 
-            m.decode()?;
+            m.decode().unwrap();
             let mut encoded = ChannelData {
                 data: m.data.clone(),
                 number: m.number,
@@ -311,13 +301,11 @@ mod chandata_test {
                 ..Default::default()
             };
 
-            decoded.decode()?;
+            decoded.decode().unwrap();
             assert_eq!(decoded, m, "should be equal");
 
             messages.push(m);
         }
         assert_eq!(messages.len(), 2, "unexpected message slice list");
-
-        Ok(())
     }
 }

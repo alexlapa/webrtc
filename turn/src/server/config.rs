@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
-use crate::util::Conn;
 use tokio::{sync::mpsc, time::Duration};
 
-use crate::{allocation::*, auth::*, error::*, relay::*};
+use crate::{allocation::*, auth::*, error::*, net::Conn, relay::*};
 
 /// ConnConfig is used for UDP listeners
 pub struct ConnConfig {
@@ -15,7 +14,7 @@ pub struct ConnConfig {
 }
 
 impl ConnConfig {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<(), Error> {
         self.relay_addr_generator.validate()
     }
 }
@@ -42,7 +41,7 @@ pub struct ServerConfig {
 }
 
 impl ServerConfig {
-    pub fn validate(&self) -> Result<()> {
+    pub fn validate(&self) -> Result<(), Error> {
         if self.conn_configs.is_empty() {
             return Err(Error::ErrNoAvailableConns);
         }

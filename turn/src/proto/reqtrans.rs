@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::stun::{self, attributes::*, checks::*, message::*};
+use crate::stun::{self, attrs::*, checks::*, msg::*};
 
 use super::*;
 
@@ -113,8 +113,9 @@ mod reqtrans_test {
 
                 m.add(ATTR_REQUESTED_TRANSPORT, &[1, 2, 3]);
                 if let Err(err) = handle.get_from(&m) {
-                    assert!(
-                        is_attr_size_invalid(&err),
+                    assert_eq!(
+                        err,
+                        stun::Error::ErrAttributeSizeInvalid,
                         "IsAttrSizeInvalid should be true"
                     );
                 } else {

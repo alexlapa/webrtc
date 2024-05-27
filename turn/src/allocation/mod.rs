@@ -14,8 +14,8 @@ use std::{
 };
 
 use crate::{
-    stun::{agent::*, message::*, textattrs::Username},
-    util::Conn,
+    net::Conn,
+    stun::{agent::*, msg::*, textattrs::Username},
 };
 use channel_bind::*;
 use five_tuple::*;
@@ -148,7 +148,11 @@ impl Allocation {
 
     /// Adds a new [`ChannelBind`] to this [`Allocation`], it also updates the
     /// permissions needed for this [`ChannelBind`].
-    pub async fn add_channel_bind(&self, mut c: ChannelBind, lifetime: Duration) -> Result<()> {
+    pub async fn add_channel_bind(
+        &self,
+        mut c: ChannelBind,
+        lifetime: Duration,
+    ) -> Result<(), Error> {
         {
             if let Some(addr) = self.get_channel_addr(&c.number).await {
                 if addr != c.peer {
@@ -216,7 +220,7 @@ impl Allocation {
     }
 
     /// Closes the [`Allocation`].
-    pub async fn close(&self) -> Result<()> {
+    pub async fn close(&self) -> Result<(), Error> {
         if self.closed.load(Ordering::Acquire) {
             return Err(Error::ErrClosed);
         }
@@ -466,17 +470,17 @@ impl Allocation {
 mod allocation_test {
     use std::str::FromStr;
 
-    use crate::stun::{attributes::ATTR_USERNAME, textattrs::TextAttribute};
+    use crate::stun::{attrs::ATTR_USERNAME, textattrs::TextAttribute};
     use tokio::net::UdpSocket;
 
     use super::*;
     use crate::proto::lifetime::DEFAULT_LIFETIME;
 
     #[tokio::test]
-    async fn test_has_permission() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_has_permission() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -486,9 +490,9 @@ mod allocation_test {
             None,
         );
 
-        let addr1 = SocketAddr::from_str("127.0.0.1:3478")?;
-        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
-        let addr3 = SocketAddr::from_str("127.0.0.2:3478")?;
+        let addr1 = SocketAddr::from_str("127.0.0.1:3478").unwrap();
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479").unwrap();
+        let addr3 = SocketAddr::from_str("127.0.0.2:3478").unwrap();
 
         let p1 = Permission::new(addr1);
         let p2 = Permission::new(addr2);
@@ -506,15 +510,13 @@ mod allocation_test {
 
         let found_p3 = a.has_permission(&addr3).await;
         assert!(found_p3, "Permission with another IP should be found");
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_add_permission() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_add_permission() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -524,21 +526,19 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
         let p = Permission::new(addr);
         a.add_permission(p).await;
 
         let found_p = a.has_permission(&addr).await;
         assert!(found_p, "Should keep the first one.");
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_remove_permission() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_remove_permission() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -548,7 +548,7 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
 
         let p = Permission::new(addr);
         a.add_permission(p).await;
@@ -563,15 +563,13 @@ mod allocation_test {
             !found_permission,
             "Got permission should be nil after removed."
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_add_channel_bind() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_add_channel_bind() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -581,10 +579,10 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
         let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
 
-        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await.unwrap();
 
         let c2 = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER + 1), addr);
         let result = a.add_channel_bind(c2, DEFAULT_LIFETIME).await;
@@ -593,19 +591,17 @@ mod allocation_test {
             "should failed with conflicted peer address"
         );
 
-        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479").unwrap();
         let c3 = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr2);
         let result = a.add_channel_bind(c3, DEFAULT_LIFETIME).await;
         assert!(result.is_err(), "should fail with conflicted number.");
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_channel_by_number() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_get_channel_by_number() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -615,10 +611,10 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
         let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
 
-        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await.unwrap();
 
         let exist_channel_addr = a
             .get_channel_addr(&ChannelNumber(MIN_CHANNEL_NUMBER))
@@ -633,15 +629,13 @@ mod allocation_test {
             not_exist_channel.is_none(),
             "should be nil for not existed channel."
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_get_channel_by_addr() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_get_channel_by_addr() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -651,11 +645,11 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
-        let addr2 = SocketAddr::from_str("127.0.0.1:3479")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
+        let addr2 = SocketAddr::from_str("127.0.0.1:3479").unwrap();
         let c = ChannelBind::new(ChannelNumber(MIN_CHANNEL_NUMBER), addr);
 
-        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await.unwrap();
 
         let exist_channel_number = a.get_channel_number(&addr).await.unwrap();
         assert_eq!(ChannelNumber(MIN_CHANNEL_NUMBER), exist_channel_number);
@@ -665,15 +659,13 @@ mod allocation_test {
             not_exist_channel.is_none(),
             "should be nil for not existed channel."
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_remove_channel_bind() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_remove_channel_bind() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -683,11 +675,11 @@ mod allocation_test {
             None,
         );
 
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
         let number = ChannelNumber(MIN_CHANNEL_NUMBER);
         let c = ChannelBind::new(number, addr);
 
-        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await.unwrap();
 
         a.remove_channel_bind(number).await;
 
@@ -702,15 +694,13 @@ mod allocation_test {
             not_exist_channel.is_none(),
             "should be nil for not existed channel."
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_allocation_refresh() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_allocation_refresh() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -724,15 +714,13 @@ mod allocation_test {
         a.refresh(Duration::from_secs(0)).await;
 
         assert!(!a.stop(), "lifetimeTimer has expired");
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_allocation_close() -> Result<()> {
-        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_allocation_close() {
+        let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
         let relay_socket = Arc::clone(&turn_socket);
-        let relay_addr = relay_socket.local_addr()?;
+        let relay_addr = relay_socket.local_addr().unwrap();
         let a = Allocation::new(
             turn_socket,
             relay_socket,
@@ -746,17 +734,15 @@ mod allocation_test {
         a.start(DEFAULT_LIFETIME).await;
 
         // add channel
-        let addr = SocketAddr::from_str("127.0.0.1:3478")?;
+        let addr = SocketAddr::from_str("127.0.0.1:3478").unwrap();
         let number = ChannelNumber(MIN_CHANNEL_NUMBER);
         let c = ChannelBind::new(number, addr);
 
-        a.add_channel_bind(c, DEFAULT_LIFETIME).await?;
+        a.add_channel_bind(c, DEFAULT_LIFETIME).await.unwrap();
 
         // add permission
         a.add_permission(Permission::new(addr)).await;
 
-        a.close().await?;
-
-        Ok(())
+        a.close().await.unwrap();
     }
 }

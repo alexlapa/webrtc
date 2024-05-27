@@ -87,13 +87,12 @@ impl ChannelBind {
 mod channel_bind_test {
     use std::net::Ipv4Addr;
 
-    use crate::stun::{attributes::ATTR_USERNAME, textattrs::TextAttribute};
+    use crate::stun::{attrs::ATTR_USERNAME, textattrs::TextAttribute};
     use tokio::net::UdpSocket;
 
     use super::*;
-    use crate::error::Result;
 
-    async fn create_channel_bind(lifetime: Duration) -> Result<Allocation> {
+    async fn create_channel_bind(lifetime: Duration) -> Result<Allocation, Error> {
         let turn_socket = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
         let relay_socket = Arc::clone(&turn_socket);
         let relay_addr = relay_socket.local_addr()?;
@@ -115,8 +114,10 @@ mod channel_bind_test {
     }
 
     #[tokio::test]
-    async fn test_channel_bind() -> Result<()> {
-        let a = create_channel_bind(Duration::from_millis(20)).await?;
+    async fn test_channel_bind() {
+        let a = create_channel_bind(Duration::from_millis(20))
+            .await
+            .unwrap();
 
         let result = a.get_channel_addr(&ChannelNumber(MIN_CHANNEL_NUMBER)).await;
         if let Some(addr) = result {
@@ -124,7 +125,5 @@ mod channel_bind_test {
         } else {
             panic!("expected some, but got none");
         }
-
-        Ok(())
     }
 }

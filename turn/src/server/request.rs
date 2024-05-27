@@ -7,11 +7,11 @@ use std::{
 };
 
 use crate::{
+    net::Conn,
     stun::{
-        self, agent::*, attributes::*, error_code::*, fingerprint::*, integrity::*, message::*,
+        self, agent::*, attrs::*, error_code::*, fingerprint::*, integrity::*, msg::*,
         textattrs::*, uattrs::*, xoraddr::*,
     },
-    util::Conn,
 };
 use md5::{Digest, Md5};
 use tokio::{
@@ -83,7 +83,8 @@ impl Request {
     }
 
     /// Processes the give [`Request`]
-    pub async fn handle_request(&mut self) -> Result<()> {
+    pub async fn handle_request(&mut self) -> Result<(), Error> {
+        println!("handle_request");
         if ChannelData::is_channel_data(&self.buff) {
             self.handle_data_packet().await
         } else {
@@ -91,7 +92,7 @@ impl Request {
         }
     }
 
-    async fn handle_data_packet(&mut self) -> Result<()> {
+    async fn handle_data_packet(&mut self) -> Result<(), Error> {
         log::debug!("received DataPacket from {}", self.src_addr);
         let mut c = ChannelData {
             raw: self.buff.clone(),
@@ -101,7 +102,7 @@ impl Request {
         self.handle_channel_data(&c).await
     }
 
-    async fn handle_turn_packet(&mut self) -> Result<()> {
+    async fn handle_turn_packet(&mut self) -> Result<(), Error> {
         log::debug!("handle_turn_packet");
         let mut m = Message {
             raw: self.buff.clone(),
@@ -112,7 +113,7 @@ impl Request {
         self.process_message_handler(&m).await
     }
 
-    async fn process_message_handler(&mut self, m: &Message) -> Result<()> {
+    async fn process_message_handler(&mut self, m: &Message) -> Result<(), Error> {
         if m.typ.class == CLASS_INDICATION {
             match m.typ.method {
                 METHOD_SEND => self.handle_send_indication(m).await,
@@ -136,7 +137,7 @@ impl Request {
         &mut self,
         m: &Message,
         calling_method: Method,
-    ) -> Result<Option<(Username, MessageIntegrity)>> {
+    ) -> Result<Option<(Username, MessageIntegrity)>, Error> {
         if !m.contains(ATTR_MESSAGE_INTEGRITY) {
             self.respond_with_nonce(m, calling_method, CODE_UNAUTHORIZED)
                 .await?;
@@ -226,7 +227,7 @@ impl Request {
         m: &Message,
         calling_method: Method,
         response_code: ErrorCode,
-    ) -> Result<()> {
+    ) -> Result<(), Error> {
         let nonce = build_nonce()?;
 
         {
@@ -254,7 +255,7 @@ impl Request {
         build_and_send(&self.conn, self.src_addr, msg).await
     }
 
-    pub(crate) async fn handle_binding_request(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_binding_request(&mut self, m: &Message) -> Result<(), Error> {
         log::debug!("received BindingRequest from {}", self.src_addr);
 
         let (ip, port) = (self.src_addr.ip(), self.src_addr.port());
@@ -272,7 +273,7 @@ impl Request {
     }
 
     /// https://tools.ietf.org/html/rfc5766#section-6.2
-    pub(crate) async fn handle_allocate_request(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_allocate_request(&mut self, m: &Message) -> Result<(), Error> {
         log::debug!("received AllocateRequest from {}", self.src_addr);
 
         // 1. The server MUST require that the request be authenticated.  This
@@ -605,7 +606,7 @@ impl Request {
         build_and_send(&self.conn, self.src_addr, msg).await
     }
 
-    pub(crate) async fn handle_refresh_request(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_refresh_request(&mut self, m: &Message) -> Result<(), Error> {
         log::debug!("received RefreshRequest from {}", self.src_addr);
 
         let (_, message_integrity) =
@@ -673,7 +674,10 @@ impl Request {
         build_and_send(&self.conn, self.src_addr, msg).await
     }
 
-    pub(crate) async fn handle_create_permission_request(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_create_permission_request(
+        &mut self,
+        m: &Message,
+    ) -> Result<(), Error> {
         log::debug!("received CreatePermission from {}", self.src_addr);
 
         let a = self
@@ -766,7 +770,7 @@ impl Request {
         }
     }
 
-    pub(crate) async fn handle_send_indication(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_send_indication(&mut self, m: &Message) -> Result<(), Error> {
         log::debug!("received SendIndication from {}", self.src_addr);
 
         let a = self
@@ -806,7 +810,7 @@ impl Request {
         }
     }
 
-    pub(crate) async fn handle_channel_bind_request(&mut self, m: &Message) -> Result<()> {
+    pub(crate) async fn handle_channel_bind_request(&mut self, m: &Message) -> Result<(), Error> {
         log::debug!("received ChannelBindRequest from {}", self.src_addr);
 
         let a = self
@@ -909,7 +913,7 @@ impl Request {
         }
     }
 
-    pub(crate) async fn handle_channel_data(&mut self, c: &ChannelData) -> Result<()> {
+    pub(crate) async fn handle_channel_data(&mut self, c: &ChannelData) -> Result<(), Error> {
         log::debug!("received ChannelData from {}", self.src_addr);
 
         let a = self
@@ -954,7 +958,7 @@ pub(crate) fn rand_seq(n: usize) -> String {
     }
 }
 
-pub(crate) fn build_nonce() -> Result<String> {
+pub(crate) fn build_nonce() -> Result<String, Error> {
     // #nosec
     let mut s = String::new();
     s.push_str(
@@ -977,7 +981,7 @@ pub(crate) async fn build_and_send(
     conn: &Arc<dyn Conn + Send + Sync>,
     dst: SocketAddr,
     msg: Message,
-) -> Result<()> {
+) -> Result<(), Error> {
     let _ = conn.send_to(&msg.raw, dst).await?;
     Ok(())
 }
@@ -988,7 +992,7 @@ pub(crate) async fn build_and_send_err(
     dst: SocketAddr,
     msg: Message,
     err: Error,
-) -> Result<()> {
+) -> Result<(), Error> {
     build_and_send(conn, dst, msg).await?;
 
     Err(err)
@@ -998,7 +1002,7 @@ pub(crate) fn build_msg(
     transaction_id: TransactionId,
     msg_type: MessageType,
     mut additional: Vec<Box<dyn Setter>>,
-) -> Result<Message> {
+) -> Result<Message, Error> {
     let mut attrs: Vec<Box<dyn Setter>> = vec![
         Box::new(Message {
             transaction_id,
@@ -1029,7 +1033,7 @@ pub(crate) fn allocation_lifetime(m: &Message) -> Duration {
 mod request_test {
     use std::{net::IpAddr, str::FromStr};
 
-    use crate::{relay::*, util::vnet::net::*};
+    use crate::{error::Error, net::*, relay::*};
     use tokio::{
         net::UdpSocket,
         time::{Duration, Instant},
@@ -1040,7 +1044,7 @@ mod request_test {
     const STATIC_KEY: &str = "ABC";
 
     #[tokio::test]
-    async fn test_allocation_lifetime_parsing() -> Result<()> {
+    async fn test_allocation_lifetime_parsing() {
         let lifetime = Lifetime(Duration::from_secs(5));
 
         let mut m = Message::new();
@@ -1051,31 +1055,27 @@ mod request_test {
             "Allocation lifetime should be default time duration"
         );
 
-        lifetime.add_to(&mut m)?;
+        lifetime.add_to(&mut m).unwrap();
 
         let lifetime_duration = allocation_lifetime(&m);
         assert_eq!(
             lifetime_duration, lifetime.0,
             "Expect lifetime_duration is {lifetime}, but {lifetime_duration:?}"
         );
-
-        Ok(())
     }
 
     #[tokio::test]
-    async fn test_allocation_lifetime_overflow() -> Result<()> {
+    async fn test_allocation_lifetime_overflow() {
         let lifetime = Lifetime(MAXIMUM_ALLOCATION_LIFETIME * 2);
 
         let mut m2 = Message::new();
-        lifetime.add_to(&mut m2)?;
+        lifetime.add_to(&mut m2).unwrap();
 
         let lifetime_duration = allocation_lifetime(&m2);
         assert_eq!(
             lifetime_duration, DEFAULT_LIFETIME,
             "Expect lifetime_duration is {DEFAULT_LIFETIME:?}, but {lifetime_duration:?}"
         );
-
-        Ok(())
     }
 
     struct TestAuthHandler;
@@ -1085,24 +1085,24 @@ mod request_test {
             _username: &str,
             _realm: &str,
             _src_addr: SocketAddr,
-        ) -> Result<Vec<u8>> {
+        ) -> Result<Vec<u8>, Error> {
             Ok(STATIC_KEY.as_bytes().to_vec())
         }
     }
 
     #[tokio::test]
-    async fn test_allocation_lifetime_deletion_zero_lifetime() -> Result<()> {
-        let l = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
+    async fn test_allocation_lifetime_deletion_zero_lifetime() {
+        let l = Arc::new(UdpSocket::bind("0.0.0.0:0").await.unwrap());
 
         let allocation_manager = Arc::new(Manager::new(ManagerConfig {
             relay_addr_generator: Box::new(RelayAddressGeneratorNone {
                 address: "0.0.0.0".to_owned(),
-                net: Arc::new(Net::new()),
+                net: Arc::new(Net::default()),
             }),
             alloc_close_notify: None,
         }));
 
-        let socket = SocketAddr::new(IpAddr::from_str("127.0.0.1")?, 5000);
+        let socket = SocketAddr::new(IpAddr::from_str("127.0.0.1").unwrap(), 5000);
 
         let mut r = Request::new(l, socket, allocation_manager, Arc::new(TestAuthHandler {}));
 
@@ -1113,7 +1113,7 @@ mod request_test {
 
         let five_tuple = FiveTuple {
             src_addr: r.src_addr,
-            dst_addr: r.conn.local_addr()?,
+            dst_addr: r.conn.local_addr().unwrap(),
             protocol: PROTO_UDP,
         };
 
@@ -1126,7 +1126,8 @@ mod request_test {
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
             )
-            .await?;
+            .await
+            .unwrap();
         assert!(r
             .allocation_manager
             .get_allocation(&five_tuple)
@@ -1134,19 +1135,25 @@ mod request_test {
             .is_some());
 
         let mut m = Message::new();
-        Lifetime::default().add_to(&mut m)?;
-        MessageIntegrity(STATIC_KEY.as_bytes().to_vec()).add_to(&mut m)?;
-        Nonce::new(ATTR_NONCE, STATIC_KEY.to_owned()).add_to(&mut m)?;
-        Realm::new(ATTR_REALM, STATIC_KEY.to_owned()).add_to(&mut m)?;
-        Username::new(ATTR_USERNAME, STATIC_KEY.to_owned()).add_to(&mut m)?;
+        Lifetime::default().add_to(&mut m).unwrap();
+        MessageIntegrity(STATIC_KEY.as_bytes().to_vec())
+            .add_to(&mut m)
+            .unwrap();
+        Nonce::new(ATTR_NONCE, STATIC_KEY.to_owned())
+            .add_to(&mut m)
+            .unwrap();
+        Realm::new(ATTR_REALM, STATIC_KEY.to_owned())
+            .add_to(&mut m)
+            .unwrap();
+        Username::new(ATTR_USERNAME, STATIC_KEY.to_owned())
+            .add_to(&mut m)
+            .unwrap();
 
-        r.handle_refresh_request(&m).await?;
+        r.handle_refresh_request(&m).await.unwrap();
         assert!(r
             .allocation_manager
             .get_allocation(&five_tuple)
             .await
             .is_none());
-
-        Ok(())
     }
 }

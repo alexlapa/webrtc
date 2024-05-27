@@ -13,7 +13,7 @@ pub mod rsrvtoken;
 
 use std::fmt;
 
-use crate::stun::{self, message::*};
+use crate::stun::msg::*;
 
 // proto implements RFC 5766 Traversal Using Relays around NAT.
 
@@ -42,12 +42,6 @@ impl fmt::Display for Protocol {
 
 // Default ports for TURN from RFC 5766 Section 4.
 
-/// `DEFAULT_PORT` for TURN is same as STUN.
-pub const DEFAULT_PORT: u16 = stun::DEFAULT_PORT;
-
-/// `DEFAULT_TLSPORT` is for TURN over TLS and is same as STUN.
-pub const DEFAULT_TLS_PORT: u16 = stun::DEFAULT_TLS_PORT;
-
 /// Shorthand for create permission request type.
 pub fn create_permission_request() -> MessageType {
     MessageType::new(METHOD_CREATE_PERMISSION, CLASS_REQUEST)
@@ -71,7 +65,6 @@ pub fn refresh_request() -> MessageType {
 #[cfg(test)]
 mod proto_test {
     use super::*;
-    use crate::error::*;
 
     #[rustfmt::skip]
     const CHROME_ALLOC_REQ_TEST_HEX: [&str; 4] = [
@@ -82,7 +75,7 @@ mod proto_test {
     ];
 
     #[test]
-    fn test_chrome_alloc_request() -> Result<()> {
+    fn test_chrome_alloc_request() {
         let mut data = vec![];
         let mut messages = vec![];
 
@@ -90,7 +83,7 @@ mod proto_test {
         for h in &CHROME_ALLOC_REQ_TEST_HEX {
             let b = match hex::decode(h) {
                 Ok(b) => b,
-                Err(_) => return Err(Error::Other("hex decode error".to_owned())),
+                Err(_) => panic!("hex decode error"),
             };
             data.push(b);
         }
@@ -99,11 +92,9 @@ mod proto_test {
         // Decoding packets to messages.
         for packet in data {
             let mut m = Message::new();
-            m.write(&packet)?;
+            m.write(&packet).unwrap();
             messages.push(m);
         }
         assert_eq!(messages.len(), 4, "unexpected message slice list");
-
-        Ok(())
     }
 }

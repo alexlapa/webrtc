@@ -1,6 +1,7 @@
+use crate::stun;
 use std::fmt;
 
-use crate::stun::{attributes::*, checks::*, error::*, message::*};
+use crate::stun::{attrs::*, checks::*, error::*, msg::*};
 
 const MAX_USERNAME_B: usize = 513;
 const MAX_REALM_B: usize = 763;
@@ -22,11 +23,6 @@ pub type Realm = TextAttribute;
 // RFC 5389 Section 15.8
 pub type Nonce = TextAttribute;
 
-// Software is SOFTWARE attribute.
-//
-// RFC 5389 Section 15.10
-pub type Software = TextAttribute;
-
 // TextAttribute is helper for adding and getting text attributes.
 #[derive(Clone, Default)]
 pub struct TextAttribute {
@@ -43,7 +39,7 @@ impl fmt::Display for TextAttribute {
 impl Setter for TextAttribute {
     // add_to_as adds attribute with type t to m, checking maximum length. If
     // max_len is less than 0, no check is performed.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         let text = self.text.as_bytes();
         let max_len = match self.attr {
             ATTR_USERNAME => MAX_USERNAME_B,
@@ -60,7 +56,7 @@ impl Setter for TextAttribute {
 }
 
 impl Getter for TextAttribute {
-    fn get_from(&mut self, m: &Message) -> Result<()> {
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error> {
         let attr = self.attr;
         *self = TextAttribute::get_from_as(m, attr)?;
         Ok(())
@@ -73,7 +69,7 @@ impl TextAttribute {
     }
 
     // get_from_as gets t attribute from m and appends its value to reset v.
-    pub fn get_from_as(m: &Message, attr: AttrType) -> Result<Self> {
+    pub fn get_from_as(m: &Message, attr: AttrType) -> Result<Self, stun::Error> {
         match attr {
             ATTR_USERNAME => {}
             ATTR_REALM => {}
@@ -95,7 +91,7 @@ mod textattrs_test {
     use super::*;
 
     #[test]
-    fn test_software_get_from() -> Result<()> {
+    fn test_software_get_from() {
         let mut m = Message::new();
         let v = "Client v0.0.1".to_owned();
         m.add(ATTR_SOFTWARE, v.as_bytes());
@@ -107,8 +103,8 @@ mod textattrs_test {
         };
 
         let mut reader = BufReader::new(m.raw.as_slice());
-        m2.read_from(&mut reader)?;
-        let software = TextAttribute::get_from_as(&m, ATTR_SOFTWARE)?;
+        m2.read_from(&mut reader).unwrap();
+        let software = TextAttribute::get_from_as(&m, ATTR_SOFTWARE).unwrap();
         assert_eq!(software.to_string(), v, "Expected {v}, got {software}.");
 
         let (s_attr, ok) = m.attributes.get(ATTR_SOFTWARE);
@@ -116,12 +112,10 @@ mod textattrs_test {
 
         let s = s_attr.to_string();
         assert!(s.starts_with("SOFTWARE:"), "bad string representation {s}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_software_add_to_invalid() -> Result<()> {
+    fn test_software_add_to_invalid() {
         let mut m = Message::new();
         let s = TextAttribute {
             attr: ATTR_SOFTWARE,
@@ -129,8 +123,9 @@ mod textattrs_test {
         };
         let result = s.add_to(&mut m);
         if let Err(err) = result {
-            assert!(
-                is_attr_size_overflow(&err),
+            assert_eq!(
+                err,
+                stun::Error::ErrAttributeSizeOverflow,
                 "add_to should return AttrOverflowErr, got: {err}"
             );
         } else {
@@ -149,12 +144,10 @@ mod textattrs_test {
         } else {
             panic!("expected error, but got ok");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_software_add_to_regression() -> Result<()> {
+    fn test_software_add_to_regression() {
         // s.add_to checked len(m.Raw) instead of len(s.Raw).
         let mut m = Message {
             raw: vec![0u8; 2048],
@@ -164,13 +157,11 @@ mod textattrs_test {
             attr: ATTR_SOFTWARE,
             text: String::from_utf8(vec![0; 100]).unwrap(),
         };
-        s.add_to(&mut m)?;
-
-        Ok(())
+        s.add_to(&mut m).unwrap();
     }
 
     #[test]
-    fn test_username() -> Result<()> {
+    fn test_username() {
         let username = "username".to_owned();
         let u = TextAttribute {
             attr: ATTR_USERNAME,
@@ -186,8 +177,9 @@ mod textattrs_test {
             };
             let result = bad_u.add_to(&mut m);
             if let Err(err) = result {
-                assert!(
-                    is_attr_size_overflow(&err),
+                assert_eq!(
+                    err,
+                    stun::Error::ErrAttributeSizeOverflow,
                     "add_to should return *AttrOverflowErr, got: {err}"
                 );
             } else {
@@ -196,11 +188,11 @@ mod textattrs_test {
         }
         //"add_to"
         {
-            u.add_to(&mut m)?;
+            u.add_to(&mut m).unwrap();
 
             //"GetFrom"
             {
-                let got = TextAttribute::get_from_as(&m, ATTR_USERNAME)?;
+                let got = TextAttribute::get_from_as(&m, ATTR_USERNAME).unwrap();
                 assert_eq!(
                     got.to_string(),
                     username,
@@ -228,15 +220,13 @@ mod textattrs_test {
                 text: "username".to_owned(),
             };
 
-            u.add_to(&mut m)?;
+            u.add_to(&mut m).unwrap();
             m.reset();
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_realm_get_from() -> Result<()> {
+    fn test_realm_get_from() {
         let mut m = Message::new();
         let v = "realm".to_owned();
         m.add(ATTR_REALM, v.as_bytes());
@@ -261,9 +251,9 @@ mod textattrs_test {
         }
 
         let mut reader = BufReader::new(m.raw.as_slice());
-        m2.read_from(&mut reader)?;
+        m2.read_from(&mut reader).unwrap();
 
-        let r = TextAttribute::get_from_as(&m, ATTR_REALM)?;
+        let r = TextAttribute::get_from_as(&m, ATTR_REALM).unwrap();
         assert_eq!(r.to_string(), v, "Expected {v}, got {r}.");
 
         let (r_attr, ok) = m.attributes.get(ATTR_REALM);
@@ -271,12 +261,10 @@ mod textattrs_test {
 
         let s = r_attr.to_string();
         assert!(s.starts_with("REALM:"), "bad string representation {s}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_realm_add_to_invalid() -> Result<()> {
+    fn test_realm_add_to_invalid() {
         let mut m = Message::new();
         let s = TextAttribute {
             attr: ATTR_REALM,
@@ -284,8 +272,9 @@ mod textattrs_test {
         };
         let result = s.add_to(&mut m);
         if let Err(err) = result {
-            assert!(
-                is_attr_size_overflow(&err),
+            assert_eq!(
+                err,
+                stun::Error::ErrAttributeSizeOverflow,
                 "add_to should return AttrOverflowErr, got: {err}"
             );
         } else {
@@ -304,12 +293,10 @@ mod textattrs_test {
         } else {
             panic!("expected error, but got ok");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_nonce_get_from() -> Result<()> {
+    fn test_nonce_get_from() {
         let mut m = Message::new();
         let v = "example.org".to_owned();
         m.add(ATTR_NONCE, v.as_bytes());
@@ -334,9 +321,9 @@ mod textattrs_test {
         }
 
         let mut reader = BufReader::new(m.raw.as_slice());
-        m2.read_from(&mut reader)?;
+        m2.read_from(&mut reader).unwrap();
 
-        let r = TextAttribute::get_from_as(&m, ATTR_NONCE)?;
+        let r = TextAttribute::get_from_as(&m, ATTR_NONCE).unwrap();
         assert_eq!(r.to_string(), v, "Expected {v}, got {r}.");
 
         let (r_attr, ok) = m.attributes.get(ATTR_NONCE);
@@ -344,12 +331,10 @@ mod textattrs_test {
 
         let s = r_attr.to_string();
         assert!(s.starts_with("NONCE:"), "bad string representation {s}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_nonce_add_to_invalid() -> Result<()> {
+    fn test_nonce_add_to_invalid() {
         let mut m = Message::new();
         let s = TextAttribute {
             attr: ATTR_NONCE,
@@ -357,8 +342,9 @@ mod textattrs_test {
         };
         let result = s.add_to(&mut m);
         if let Err(err) = result {
-            assert!(
-                is_attr_size_overflow(&err),
+            assert_eq!(
+                err,
+                stun::Error::ErrAttributeSizeOverflow,
                 "add_to should return AttrOverflowErr, got: {err}"
             );
         } else {
@@ -377,22 +363,18 @@ mod textattrs_test {
         } else {
             panic!("expected error, but got ok");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_nonce_add_to() -> Result<()> {
+    fn test_nonce_add_to() {
         let mut m = Message::new();
         let n = TextAttribute {
             attr: ATTR_NONCE,
             text: "example.org".to_owned(),
         };
-        n.add_to(&mut m)?;
+        n.add_to(&mut m).unwrap();
 
-        let v = m.get(ATTR_NONCE)?;
+        let v = m.get(ATTR_NONCE).unwrap();
         assert_eq!(v.as_slice(), b"example.org", "bad nonce {v:?}");
-
-        Ok(())
     }
 }

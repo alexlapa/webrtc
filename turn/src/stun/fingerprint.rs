@@ -1,6 +1,7 @@
+use crate::stun;
 use crc::{Crc, CRC_32_ISO_HDLC};
 
-use crate::stun::{attributes::ATTR_FINGERPRINT, checks::*, error::*, message::*};
+use crate::stun::{attrs::ATTR_FINGERPRINT, msg::*};
 
 // FingerprintAttr represents FINGERPRINT attribute.
 //
@@ -31,7 +32,7 @@ pub fn fingerprint_value(b: &[u8]) -> u32 {
 
 impl Setter for FingerprintAttr {
     // add_to adds fingerprint to message.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         let l = m.length;
         // length in header should include size of fingerprint attribute
         m.length += (FINGERPRINT_SIZE + ATTRIBUTE_HEADER_SIZE) as u32; // increasing length
@@ -44,76 +45,75 @@ impl Setter for FingerprintAttr {
     }
 }
 
-impl FingerprintAttr {
-    // Check reads fingerprint value from m and checks it, returning error if
-    // any. Can return *AttrLengthErr, ErrAttributeNotFound, and
-    // *CRCMismatch.
-    pub fn check(&self, m: &Message) -> Result<()> {
-        let b = m.get(ATTR_FINGERPRINT)?;
-        check_size(ATTR_FINGERPRINT, b.len(), FINGERPRINT_SIZE)?;
-        let val = u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
-        let attr_start = m.raw.len() - (FINGERPRINT_SIZE + ATTRIBUTE_HEADER_SIZE);
-        let expected = fingerprint_value(&m.raw[..attr_start]);
-        check_fingerprint(val, expected)
-    }
-}
-
 #[cfg(test)]
 mod fingerprint_test {
     use super::*;
-    use crate::stun::{attributes::ATTR_SOFTWARE, textattrs::TextAttribute};
+    use crate::stun::{attrs::ATTR_SOFTWARE, textattrs::TextAttribute, Error};
+
+    impl FingerprintAttr {
+        // Check reads fingerprint value from m and checks it, returning error if any.
+        // Can return *AttrLengthErr, ErrAttributeNotFound, and *CRCMismatch.
+        pub fn check(&self, m: &Message) -> Result<(), stun::Error> {
+            let b = m.get(ATTR_FINGERPRINT)?;
+            stun::checks::check_size(ATTR_FINGERPRINT, b.len(), FINGERPRINT_SIZE)?;
+            let val = u32::from_be_bytes([b[0], b[1], b[2], b[3]]);
+            let attr_start = m.raw.len() - (FINGERPRINT_SIZE + ATTRIBUTE_HEADER_SIZE);
+            let expected = fingerprint_value(&m.raw[..attr_start]);
+            if val == expected {
+                Ok(())
+            } else {
+                Err(Error::ErrFingerprintMismatch)
+            }
+        }
+    }
 
     #[test]
-    fn fingerprint_uses_crc_32_iso_hdlc() -> Result<()> {
+    fn fingerprint_uses_crc_32_iso_hdlc() {
         let mut m = Message::new();
 
         let a = TextAttribute {
             attr: ATTR_SOFTWARE,
             text: "software".to_owned(),
         };
-        a.add_to(&mut m)?;
+        a.add_to(&mut m).unwrap();
         m.write_header();
 
-        FINGERPRINT.add_to(&mut m)?;
+        FINGERPRINT.add_to(&mut m).unwrap();
         m.write_header();
 
         #[rustfmt::skip]
         assert_eq!(&m.raw[0..m.raw.len()-8], b"\x00\x00\x00\x14\x21\x12\xA4\x42\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x80\x22\x00\x08\x73\x6F\x66\x74\x77\x61\x72\x65");
 
         assert_eq!(m.raw[m.raw.len() - 4..], [0xe4, 0x4c, 0x33, 0xd9]);
-
-        Ok(())
     }
 
     #[test]
-    fn test_fingerprint_check() -> Result<()> {
+    fn test_fingerprint_check() {
         let mut m = Message::new();
         let a = TextAttribute {
             attr: ATTR_SOFTWARE,
             text: "software".to_owned(),
         };
-        a.add_to(&mut m)?;
+        a.add_to(&mut m).unwrap();
         m.write_header();
 
-        FINGERPRINT.add_to(&mut m)?;
+        FINGERPRINT.add_to(&mut m).unwrap();
         m.write_header();
-        FINGERPRINT.check(&m)?;
+        FINGERPRINT.check(&m).unwrap();
         m.raw[3] += 1;
 
         let result = FINGERPRINT.check(&m);
         assert!(result.is_err(), "should error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_fingerprint_check_bad() -> Result<()> {
+    fn test_fingerprint_check_bad() {
         let mut m = Message::new();
         let a = TextAttribute {
             attr: ATTR_SOFTWARE,
             text: "software".to_owned(),
         };
-        a.add_to(&mut m)?;
+        a.add_to(&mut m).unwrap();
         m.write_header();
 
         let result = FINGERPRINT.check(&m);
@@ -123,14 +123,13 @@ mod fingerprint_test {
 
         let result = FINGERPRINT.check(&m);
         if let Err(err) = result {
-            assert!(
-                is_attr_size_invalid(&err),
+            assert_eq!(
+                err,
+                stun::Error::ErrAttributeSizeInvalid,
                 "IsAttrSizeInvalid should be true"
             );
         } else {
             panic!("Expected error, but got ok");
         }
-
-        Ok(())
     }
 }

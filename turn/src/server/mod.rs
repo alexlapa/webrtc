@@ -3,7 +3,6 @@ pub mod request;
 
 use std::{collections::HashMap, sync::Arc};
 
-use crate::util::Conn;
 use config::*;
 use request::*;
 use tokio::{
@@ -21,6 +20,7 @@ use crate::{
     allocation::{allocation_manager::*, five_tuple::FiveTuple, AllocationInfo},
     auth::AuthHandler,
     error::*,
+    net::Conn,
     proto::lifetime::DEFAULT_LIFETIME,
 };
 
@@ -37,9 +37,9 @@ pub struct Server {
 
 impl Server {
     /// creates a new TURN server
-    pub async fn new(config: ServerConfig) -> Result<Self> {
+    pub async fn new(config: ServerConfig) -> Result<Self, Error> {
         config.validate()?;
-
+        println!("Server::new 000");
         let (command_tx, _) = broadcast::channel(16);
         let mut s = Server {
             auth_handler: config.auth_handler,
@@ -48,11 +48,11 @@ impl Server {
             nonces: Arc::new(Mutex::new(HashMap::new())),
             command_tx: Mutex::new(Some(command_tx.clone())),
         };
-
+        println!("Server::new 111");
         if s.channel_bind_timeout == Duration::from_secs(0) {
             s.channel_bind_timeout = DEFAULT_LIFETIME;
         }
-
+        println!("Server::new 222");
         for p in config.conn_configs {
             let nonces = Arc::clone(&s.nonces);
             let auth_handler = Arc::clone(&s.auth_handler);
@@ -64,7 +64,7 @@ impl Server {
                 relay_addr_generator: p.relay_addr_generator,
                 alloc_close_notify: config.alloc_close_notify.clone(),
             }));
-
+            println!("Server::new 333");
             tokio::spawn(Server::read_loop(
                 conn,
                 allocation_manager,
@@ -74,8 +74,9 @@ impl Server {
                 channel_bind_timeout,
                 handle_rx,
             ));
+            println!("Server::new 444");
         }
-
+        println!("Server::new 555");
         Ok(s)
     }
 
@@ -83,7 +84,7 @@ impl Server {
     /// `username`.
     ///
     /// [`Allocation`]: crate::allocation::Allocation
-    pub async fn delete_allocations_by_username(&self, username: String) -> Result<()> {
+    pub async fn delete_allocations_by_username(&self, username: String) -> Result<(), Error> {
         let tx = {
             let command_tx = self.command_tx.lock().await;
             command_tx.clone()
@@ -116,7 +117,7 @@ impl Server {
     pub async fn get_allocations_info(
         &self,
         five_tuples: Option<Vec<FiveTuple>>,
-    ) -> Result<HashMap<FiveTuple, AllocationInfo>> {
+    ) -> Result<HashMap<FiveTuple, AllocationInfo>, Error> {
         if let Some(five_tuples) = &five_tuples {
             if five_tuples.is_empty() {
                 return Ok(HashMap::new());
@@ -153,6 +154,7 @@ impl Server {
         channel_bind_timeout: Duration,
         mut handle_rx: broadcast::Receiver<Command>,
     ) {
+        println!("read_loop 000");
         let mut buf = vec![0u8; INBOUND_MTU];
 
         let (mut close_tx, mut close_rx) = oneshot::channel::<()>();
@@ -162,6 +164,7 @@ impl Server {
 
             async move {
                 loop {
+                    println!("read_loop 111");
                     match handle_rx.recv().await {
                         Ok(Command::DeleteAllocations(name, completion)) => {
                             allocation_manager
@@ -195,6 +198,7 @@ impl Server {
         });
 
         loop {
+            println!("read_loop 222");
             let (n, addr) = tokio::select! {
                 v = conn.recv_from(&mut buf) => {
                     match v {
@@ -230,7 +234,7 @@ impl Server {
 
     /// Close stops the TURN Server. It cleans up any associated state and
     /// closes all connections it is managing.
-    pub async fn close(&self) -> Result<()> {
+    pub async fn close(&self) -> Result<(), Error> {
         let tx = {
             let mut command_tx = self.command_tx.lock().await;
             command_tx.take()
@@ -270,105 +274,4 @@ enum Command {
 
     /// Command to close the [`Server`].
     Close(Arc<mpsc::Receiver<()>>),
-}
-
-#[cfg(test)]
-mod server_test {
-    use std::{
-        net::{IpAddr, SocketAddr},
-        str::FromStr,
-    };
-
-    use crate::util::vnet::*;
-    use tokio::net::UdpSocket;
-
-    use super::{config::*, *};
-    use crate::{auth::generate_auth_key, client::*, relay::*};
-
-    struct TestAuthHandler {
-        cred_map: HashMap<String, Vec<u8>>,
-    }
-
-    impl TestAuthHandler {
-        fn new() -> Self {
-            let mut cred_map = HashMap::new();
-            cred_map.insert(
-                "user".to_owned(),
-                generate_auth_key("user", "webrtc.rs", "pass"),
-            );
-
-            TestAuthHandler { cred_map }
-        }
-    }
-
-    impl AuthHandler for TestAuthHandler {
-        fn auth_handle(
-            &self,
-            username: &str,
-            _realm: &str,
-            _src_addr: SocketAddr,
-        ) -> Result<Vec<u8>> {
-            if let Some(pw) = self.cred_map.get(username) {
-                Ok(pw.to_vec())
-            } else {
-                Err(Error::ErrFakeErr)
-            }
-        }
-    }
-
-    #[tokio::test]
-    async fn test_server_simple() -> Result<()> {
-        // here, it should use static port, like "0.0.0.0:3478",
-        // but, due to different test environment, let's fake it by using
-        // "0.0.0.0:0" to auto assign a "static" port
-        let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-        let server_port = conn.local_addr()?.port();
-
-        let server = Server::new(ServerConfig {
-            conn_configs: vec![ConnConfig {
-                conn,
-                relay_addr_generator: Box::new(RelayAddressGeneratorStatic {
-                    relay_address: IpAddr::from_str("127.0.0.1")?,
-                    address: "0.0.0.0".to_owned(),
-                    net: Arc::new(net::Net::new()),
-                }),
-            }],
-            realm: "webrtc.rs".to_owned(),
-            auth_handler: Arc::new(TestAuthHandler::new()),
-            channel_bind_timeout: Duration::from_secs(0),
-            alloc_close_notify: None,
-        })
-        .await?;
-
-        assert_eq!(
-            DEFAULT_LIFETIME, server.channel_bind_timeout,
-            "should match"
-        );
-
-        let conn = Arc::new(UdpSocket::bind("0.0.0.0:0").await?);
-
-        let client = Client::new(ClientConfig {
-            stun_serv_addr: String::new(),
-            turn_serv_addr: String::new(),
-            username: String::new(),
-            password: String::new(),
-            realm: String::new(),
-            software: String::new(),
-            rto_in_ms: 0,
-            conn,
-            vnet: None,
-        })
-        .await?;
-
-        client.listen().await?;
-
-        client
-            .send_binding_request_to(format!("127.0.0.1:{server_port}").as_str())
-            .await?;
-
-        client.close().await?;
-        server.close().await?;
-
-        Ok(())
-    }
 }

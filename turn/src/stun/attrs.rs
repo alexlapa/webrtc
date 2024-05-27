@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::stun::{error::*, message::*};
+use crate::stun::{self, msg::*};
 
 /// Attributes is list of message attributes.
 #[derive(Default, PartialEq, Eq, Debug, Clone)]
@@ -120,28 +120,11 @@ pub const ATTR_REQUESTED_TRANSPORT: AttrType = AttrType(0x0019); // REQUESTED-TR
 pub const ATTR_DONT_FRAGMENT: AttrType = AttrType(0x001A); // DONT-FRAGMENT
 pub const ATTR_RESERVATION_TOKEN: AttrType = AttrType(0x0022); // RESERVATION-TOKEN
 
-/// Attributes from RFC 5780 NAT Behavior Discovery
-pub const ATTR_CHANGE_REQUEST: AttrType = AttrType(0x0003); // CHANGE-REQUEST
-pub const ATTR_PADDING: AttrType = AttrType(0x0026); // PADDING
-pub const ATTR_RESPONSE_PORT: AttrType = AttrType(0x0027); // RESPONSE-PORT
-pub const ATTR_CACHE_TIMEOUT: AttrType = AttrType(0x8027); // CACHE-TIMEOUT
-pub const ATTR_RESPONSE_ORIGIN: AttrType = AttrType(0x802b); // RESPONSE-ORIGIN
-pub const ATTR_OTHER_ADDRESS: AttrType = AttrType(0x802C); // OTHER-ADDRESS
-
-/// Attributes from RFC 3489, removed by RFC 5389,
-///  but still used by RFC5389-implementing software like Vovida.org,
-/// reTURNServer, etc.
-pub const ATTR_SOURCE_ADDRESS: AttrType = AttrType(0x0004); // SOURCE-ADDRESS
-pub const ATTR_CHANGED_ADDRESS: AttrType = AttrType(0x0005); // CHANGED-ADDRESS
-
 /// Attributes from RFC 6062 TURN Extensions for TCP Allocations.
 pub const ATTR_CONNECTION_ID: AttrType = AttrType(0x002a); // CONNECTION-ID
 
 /// Attributes from RFC 6156 TURN IPv6.
 pub const ATTR_REQUESTED_ADDRESS_FAMILY: AttrType = AttrType(0x0017); // REQUESTED-ADDRESS-FAMILY
-
-/// Attributes from An Origin Attribute for the STUN Protocol.
-pub const ATTR_ORIGIN: AttrType = AttrType(0x802F);
 
 /// Attributes from RFC 8489 STUN.
 pub const ATTR_MESSAGE_INTEGRITY_SHA256: AttrType = AttrType(0x001C); // MESSAGE-INTEGRITY-SHA256
@@ -173,7 +156,7 @@ impl fmt::Display for RawAttribute {
 impl Setter for RawAttribute {
     /// add_to implements Setter, adding attribute as a.Type with a.Value and
     /// ignoring the Length field.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         m.add(self.typ, &self.value);
         Ok(())
     }
@@ -214,7 +197,7 @@ mod attributes_test {
     use crate::stun::textattrs::TextAttribute;
 
     #[test]
-    fn test_raw_attribute_add_to() -> Result<()> {
+    fn test_raw_attribute_add_to() {
         let v = vec![1, 2, 3, 4];
         let mut m = Message::new();
         let ra = Box::new(RawAttribute {
@@ -222,38 +205,29 @@ mod attributes_test {
             value: v.clone(),
             ..Default::default()
         });
-        m.build(&[ra])?;
-        let got_v = m.get(ATTR_DATA)?;
+        m.build(&[ra]).unwrap();
+        let got_v = m.get(ATTR_DATA).unwrap();
         assert_eq!(got_v, v, "value mismatch");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_get_no_allocs() -> Result<()> {
+    fn test_message_get_no_allocs() {
         let mut m = Message::new();
         let a = TextAttribute {
             attr: ATTR_SOFTWARE,
             text: "c".to_owned(),
         };
-        a.add_to(&mut m)?;
+        a.add_to(&mut m).unwrap();
         m.write_header();
 
         //"Default"
         {
-            m.get(ATTR_SOFTWARE)?;
+            m.get(ATTR_SOFTWARE).unwrap();
         }
-        //"Not found"
-        {
-            let result = m.get(ATTR_ORIGIN);
-            assert!(result.is_err(), "should error");
-        }
-
-        Ok(())
     }
 
     #[test]
-    fn test_padding() -> Result<()> {
+    fn test_padding() {
         let tt = vec![
             (4, 4),   // 0
             (2, 4),   // 1
@@ -272,12 +246,10 @@ mod attributes_test {
             let got = nearest_padded_value_length(i);
             assert_eq!(got, o, "padded({i}) {got} (got) != {o} (expected)",);
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_attr_type_range() -> Result<()> {
+    fn test_attr_type_range() {
         let tests = vec![
             ATTR_PRIORITY,
             ATTR_ERROR_CODE,
@@ -289,11 +261,9 @@ mod attributes_test {
             assert!(!a.optional() && a.required(), "should be required");
         }
 
-        let tests = vec![ATTR_SOFTWARE, ATTR_ICE_CONTROLLED, ATTR_ORIGIN];
+        let tests = vec![ATTR_SOFTWARE, ATTR_ICE_CONTROLLED];
         for a in tests {
             assert!(!a.required() && a.optional(), "should be optional");
         }
-
-        Ok(())
     }
 }

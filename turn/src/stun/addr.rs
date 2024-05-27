@@ -1,9 +1,10 @@
+use crate::stun;
 use std::{
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
-use crate::stun::{attributes::*, error::*, message::*};
+use crate::stun::{attrs::*, error::*, msg::*};
 
 pub(crate) const FAMILY_IPV4: u16 = 0x01;
 pub(crate) const FAMILY_IPV6: u16 = 0x02;
@@ -46,14 +47,14 @@ impl Default for MappedAddress {
 
 impl Setter for MappedAddress {
     /// add_to adds MAPPED-ADDRESS to message.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         self.add_to_as(m, ATTR_MAPPED_ADDRESS)
     }
 }
 
 impl Getter for MappedAddress {
     /// get_from decodes MAPPED-ADDRESS from message.
-    fn get_from(&mut self, m: &Message) -> Result<()> {
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error> {
         self.get_from_as(m, ATTR_MAPPED_ADDRESS)
     }
 }
@@ -61,7 +62,7 @@ impl Getter for MappedAddress {
 impl MappedAddress {
     /// get_from_as decodes MAPPED-ADDRESS value in message m as an attribute of
     /// type t.
-    pub fn get_from_as(&mut self, m: &Message, t: AttrType) -> Result<()> {
+    pub fn get_from_as(&mut self, m: &Message, t: AttrType) -> Result<(), stun::Error> {
         let v = m.get(t)?;
         if v.len() <= 4 {
             return Err(Error::ErrUnexpectedEof);
@@ -89,7 +90,7 @@ impl MappedAddress {
     }
 
     /// add_to_as adds MAPPED-ADDRESS value to m as t attribute.
-    pub fn add_to_as(&self, m: &mut Message, t: AttrType) -> Result<()> {
+    pub fn add_to_as(&self, m: &mut Message, t: AttrType) -> Result<(), stun::Error> {
         let family = match self.ip {
             IpAddr::V4(_) => FAMILY_IPV4,
             IpAddr::V6(_) => FAMILY_IPV6,
@@ -110,27 +111,12 @@ impl MappedAddress {
     }
 }
 
-/// AlternateServer represents ALTERNATE-SERVER attribute.
-///
-/// RFC 5389 Section 15.11
-pub type AlternateServer = MappedAddress;
-
-/// ResponseOrigin represents RESPONSE-ORIGIN attribute.
-///
-/// RFC 5780 Section 7.3
-pub type ResponseOrigin = MappedAddress;
-
-/// OtherAddress represents OTHER-ADDRESS attribute.
-///
-/// RFC 5780 Section 7.4
-pub type OtherAddress = MappedAddress;
-
 #[cfg(test)]
 mod addr_test {
     use super::*;
 
     #[test]
-    fn test_mapped_address() -> Result<()> {
+    fn test_mapped_address() {
         let mut m = Message::new();
         let addr = MappedAddress {
             ip: "122.12.34.5".parse().unwrap(),
@@ -140,12 +126,12 @@ mod addr_test {
 
         //"add_to"
         {
-            addr.add_to(&mut m)?;
+            addr.add_to(&mut m).unwrap();
 
             //"GetFrom"
             {
                 let mut got = MappedAddress::default();
-                got.get_from(&m)?;
+                got.get_from(&m).unwrap();
                 assert_eq!(got.ip, addr.ip, "got bad IP: {}", got.ip);
 
                 //"Not found"
@@ -166,7 +152,7 @@ mod addr_test {
                 {
                     let (mut v, _) = m.attributes.get(ATTR_MAPPED_ADDRESS);
                     v.value[0] = 32;
-                    got.get_from(&m)?
+                    got.get_from(&m).unwrap()
                 }
                 //"Bad length"
                 {
@@ -187,12 +173,10 @@ mod addr_test {
                 }
             }
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_mapped_address_v6() -> Result<()> {
+    fn test_mapped_address_v6() {
         let mut m = Message::new();
         let addr = MappedAddress {
             ip: "::".parse().unwrap(),
@@ -201,12 +185,12 @@ mod addr_test {
 
         //"add_to"
         {
-            addr.add_to(&mut m)?;
+            addr.add_to(&mut m).unwrap();
 
             //"GetFrom"
             {
                 let mut got = MappedAddress::default();
-                got.get_from(&m)?;
+                got.get_from(&m).unwrap();
                 assert_eq!(got.ip, addr.ip, "got bad IP: {}", got.ip);
 
                 //"Not found"
@@ -227,86 +211,5 @@ mod addr_test {
                 }
             }
         }
-        Ok(())
-    }
-
-    #[test]
-    fn test_alternate_server() -> Result<()> {
-        let mut m = Message::new();
-        let addr = MappedAddress {
-            ip: "122.12.34.5".parse().unwrap(),
-            port: 5412,
-        };
-
-        //"add_to"
-        {
-            addr.add_to(&mut m)?;
-
-            //"GetFrom"
-            {
-                let mut got = AlternateServer::default();
-                got.get_from(&m)?;
-                assert_eq!(got.ip, addr.ip, "got bad IP: {}", got.ip);
-
-                //"Not found"
-                {
-                    let message = Message::new();
-                    let result = got.get_from(&message);
-                    if let Err(err) = result {
-                        assert_eq!(
-                            Error::ErrAttributeNotFound,
-                            err,
-                            "<{}> should be <{}>",
-                            err,
-                            Error::ErrAttributeNotFound,
-                        );
-                    } else {
-                        panic!("expected error, but got ok");
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_other_address() -> Result<()> {
-        let mut m = Message::new();
-        let addr = OtherAddress {
-            ip: "122.12.34.5".parse().unwrap(),
-            port: 5412,
-        };
-
-        //"add_to"
-        {
-            addr.add_to(&mut m)?;
-
-            //"GetFrom"
-            {
-                let mut got = OtherAddress::default();
-                got.get_from(&m)?;
-                assert_eq!(got.ip, addr.ip, "got bad IP: {}", got.ip);
-
-                //"Not found"
-                {
-                    let message = Message::new();
-                    let result = got.get_from(&message);
-                    if let Err(err) = result {
-                        assert_eq!(
-                            Error::ErrAttributeNotFound,
-                            err,
-                            "<{}> should be <{}>",
-                            err,
-                            Error::ErrAttributeNotFound,
-                        );
-                    } else {
-                        panic!("expected error, but got ok");
-                    }
-                }
-            }
-        }
-
-        Ok(())
     }
 }

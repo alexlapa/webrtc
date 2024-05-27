@@ -1,10 +1,8 @@
-use std::{io, net, num::ParseIntError, time::SystemTimeError};
+use std::{io, num::ParseIntError, time::SystemTimeError};
 
 use thiserror::Error;
 
-use crate::{stun, util};
-
-pub type Result<T> = std::result::Result<T, Error>;
+use crate::{net, stun};
 
 #[derive(Debug, Error, PartialEq)]
 #[non_exhaustive]
@@ -21,18 +19,6 @@ pub enum Error {
     ErrMinPortNotZero,
     #[error("turn: MaxPort less than MinPort")]
     ErrMaxPortLessThanMinPort,
-    #[error("all retransmissions failed")]
-    ErrAllRetransmissionsFailed,
-    #[error("no binding found for channel")]
-    ErrChannelBindNotFound,
-    #[error("STUN server address is not set for the client")]
-    ErrStunserverAddressNotSet,
-    #[error("only one Allocate() caller is allowed")]
-    ErrOneAllocateOnly,
-    #[error("non-STUN message from STUN server")]
-    ErrNonStunmessage,
-    #[error("unexpected STUN request message")]
-    ErrUnexpectedStunrequestMessage,
     #[error("channel number not in [0x4000, 0x7FFF]")]
     ErrInvalidChannelNumber,
     #[error("channelData length != len(Data)")]
@@ -45,20 +31,8 @@ pub enum Error {
     ErrPeerAddressFamilyMismatch,
     #[error("fake error")]
     ErrFakeErr,
-    #[error("try again")]
-    ErrTryAgain,
     #[error("use of closed network connection")]
     ErrClosed,
-    #[error("already closed")]
-    ErrAlreadyClosed,
-    #[error("transaction closed")]
-    ErrTransactionClosed,
-    #[error("wait_for_result called on non-result transaction")]
-    ErrWaitForResultOnNonResultTransaction,
-    #[error("too short buffer")]
-    ErrShortBuffer,
-    #[error("unexpected response type")]
-    ErrUnexpectedResponse,
     #[error("you cannot use the same channel number with different peer")]
     ErrSameChannelDifferentPeer,
     #[error("allocations must not be created with a lifetime of 0")]
@@ -71,8 +45,6 @@ pub enum Error {
     ErrNoSuchUser,
     #[error("unexpected class")]
     ErrUnexpectedClass,
-    #[error("failed to create stun message from packet")]
-    ErrFailedToCreateStunpacket,
     #[error("relay already allocated for 5-TUPLE")]
     ErrRelayAlreadyAllocatedForFiveTuple,
     #[error("RequestedTransport must be UDP")]
@@ -91,16 +63,14 @@ pub enum Error {
     ErrShortWrite,
     #[error("no such channel bind")]
     ErrNoSuchChannelBind,
-    #[error("failed writing to socket")]
-    ErrFailedWriteSocket,
     #[error("parse int: {0}")]
     ParseInt(#[from] ParseIntError),
     #[error("parse addr: {0}")]
-    ParseIp(#[from] net::AddrParseError),
+    ParseIp(#[from] std::net::AddrParseError),
     #[error("{0}")]
     Io(#[source] IoError),
     #[error("{0}")]
-    Util(#[from] util::Error),
+    Util(#[from] net::Error),
     #[error("{0}")]
     Stun(#[from] stun::Error),
     #[error("{0}")]

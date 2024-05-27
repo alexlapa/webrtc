@@ -1,6 +1,7 @@
+use crate::stun;
 use std::{collections::HashMap, fmt};
 
-use crate::stun::{attributes::*, checks::*, error::*, message::*};
+use crate::stun::{attrs::*, checks::*, error::*, msg::*};
 
 // ErrorCodeAttribute represents ERROR-CODE attribute.
 //
@@ -31,7 +32,7 @@ const ERROR_CODE_MODULO: u16 = 100;
 
 impl Setter for ErrorCodeAttribute {
     // add_to adds ERROR-CODE to m.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         check_overflow(
             ATTR_ERROR_CODE,
             self.reason.len() + ERROR_CODE_REASON_START,
@@ -55,7 +56,7 @@ impl Setter for ErrorCodeAttribute {
 
 impl Getter for ErrorCodeAttribute {
     // GetFrom decodes ERROR-CODE from m. Reason is valid until m.Raw is valid.
-    fn get_from(&mut self, m: &Message) -> Result<()> {
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error> {
         let v = m.get(ATTR_ERROR_CODE)?;
 
         if v.len() < ERROR_CODE_REASON_START {
@@ -79,7 +80,7 @@ pub struct ErrorCode(pub u16);
 impl Setter for ErrorCode {
     // add_to adds ERROR-CODE with default reason to m. If there
     // is no default reason, returns ErrNoDefaultReason.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         if let Some(reason) = ERROR_REASONS.get(self) {
             let a = ErrorCodeAttribute {
                 code: *self,
@@ -100,10 +101,6 @@ pub const CODE_UNKNOWN_ATTRIBUTE: ErrorCode = ErrorCode(420);
 pub const CODE_STALE_NONCE: ErrorCode = ErrorCode(438);
 pub const CODE_ROLE_CONFLICT: ErrorCode = ErrorCode(487);
 pub const CODE_SERVER_ERROR: ErrorCode = ErrorCode(500);
-
-// DEPRECATED constants.
-// DEPRECATED, use CODE_UNAUTHORIZED.
-pub const CODE_UNAUTHORISED: ErrorCode = CODE_UNAUTHORIZED;
 
 // Error codes from RFC 5766.
 //

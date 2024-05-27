@@ -1,6 +1,7 @@
+use crate::stun;
 use std::fmt;
 
-use crate::stun::{attributes::*, error::*, message::*};
+use crate::stun::{attrs::*, error::*, msg::*};
 
 // UnknownAttributes represents UNKNOWN-ATTRIBUTES attribute.
 //
@@ -26,7 +27,7 @@ const ATTR_TYPE_SIZE: usize = 2;
 
 impl Setter for UnknownAttributes {
     // add_to adds UNKNOWN-ATTRIBUTES attribute to message.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         let mut v = Vec::with_capacity(ATTR_TYPE_SIZE * 20); // 20 should be enough
 
         // If len(a.Types) > 20, there will be allocations.
@@ -40,7 +41,7 @@ impl Setter for UnknownAttributes {
 
 impl Getter for UnknownAttributes {
     // GetFrom parses UNKNOWN-ATTRIBUTES from message.
-    fn get_from(&mut self, m: &Message) -> Result<()> {
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error> {
         let v = m.get(ATTR_UNKNOWN_ATTRIBUTES)?;
         if v.len() % ATTR_TYPE_SIZE != 0 {
             return Err(Error::ErrBadUnknownAttrsSize);
@@ -62,7 +63,7 @@ mod uattrs_test {
     use super::*;
 
     #[test]
-    fn test_unknown_attributes() -> Result<()> {
+    fn test_unknown_attributes() {
         let mut m = Message::new();
         let a = UnknownAttributes(vec![ATTR_DONT_FRAGMENT, ATTR_CHANNEL_NUMBER]);
         assert_eq!(
@@ -76,12 +77,12 @@ mod uattrs_test {
             "bad blank string"
         );
 
-        a.add_to(&mut m)?;
+        a.add_to(&mut m).unwrap();
 
         //"GetFrom"
         {
             let mut attrs = UnknownAttributes(Vec::with_capacity(10));
-            attrs.get_from(&m)?;
+            attrs.get_from(&m).unwrap();
             for i in 0..a.0.len() {
                 assert_eq!(a.0[i], attrs.0[i], "expected {} != {}", a.0[i], attrs.0[i]);
             }
@@ -93,7 +94,5 @@ mod uattrs_test {
             let result = attrs.get_from(&m_blank);
             assert!(result.is_err(), "should error");
         }
-
-        Ok(())
     }
 }

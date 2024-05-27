@@ -1,32 +1,30 @@
+use nix::sys::socket::{AddressFamily, SockaddrLike, SockaddrStorage};
+use std::{
+    io::Error,
+    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+};
+
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum NextHop {
-    Broadcast(::std::net::SocketAddr),
-    Destination(::std::net::SocketAddr),
+    Broadcast(SocketAddr),
+    Destination(SocketAddr),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum Kind {
     Packet,
-    Link,
     Ipv4,
     Ipv6,
-    Unknow(i32),
 }
 
 #[derive(Debug, Clone)]
 pub struct Interface {
     pub name: String,
     pub kind: Kind,
-    pub addr: Option<::std::net::SocketAddr>,
-    pub mask: Option<::std::net::SocketAddr>,
+    pub addr: Option<SocketAddr>,
+    pub mask: Option<SocketAddr>,
     pub hop: Option<NextHop>,
 }
-
-use nix::sys::socket::{AddressFamily, SockaddrLike, SockaddrStorage};
-use std::{
-    io::Error,
-    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
-};
 
 fn ss_to_netsa(ss: &SockaddrStorage) -> Option<SocketAddr> {
     match ss.family() {

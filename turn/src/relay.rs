@@ -6,8 +6,8 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    error::{Result, *},
-    util::{vnet::net::*, Conn},
+    error::*,
+    net::{Conn, Net},
 };
 
 /// `RelayAddressGenerator` is used to generate a Relay Address when creating an
@@ -15,14 +15,14 @@ use crate::{
 #[async_trait]
 pub trait RelayAddressGenerator {
     /// Confirms that this is properly initialized
-    fn validate(&self) -> Result<()>;
+    fn validate(&self) -> Result<(), Error>;
 
     /// Allocates a Relay Address
     async fn allocate_conn(
         &self,
         use_ipv4: bool,
         requested_port: u16,
-    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr)>;
+    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error>;
 }
 
 /// `RelayAddressGenerator` is used to generate a Relay Address when creating an
@@ -50,7 +50,7 @@ pub struct RelayAddressGeneratorRanges {
 
 #[async_trait]
 impl RelayAddressGenerator for RelayAddressGeneratorRanges {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<(), Error> {
         if self.min_port == 0 {
             Err(Error::ErrMinPortNotZero)
         } else if self.max_port == 0 {
@@ -68,7 +68,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
         &self,
         use_ipv4: bool,
         requested_port: u16,
-    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr)> {
+    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let max_retries = if self.max_retries == 0 {
             10
         } else {
@@ -115,7 +115,7 @@ pub struct RelayAddressGeneratorNone {
 
 #[async_trait]
 impl RelayAddressGenerator for RelayAddressGeneratorNone {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<(), Error> {
         if self.address.is_empty() {
             Err(Error::ErrListeningAddressInvalid)
         } else {
@@ -127,7 +127,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorNone {
         &self,
         use_ipv4: bool,
         requested_port: u16,
-    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr)> {
+    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let addr = self
             .net
             .resolve_addr(use_ipv4, &format!("{}:{}", self.address, requested_port))
@@ -154,7 +154,7 @@ pub struct RelayAddressGeneratorStatic {
 
 #[async_trait]
 impl RelayAddressGenerator for RelayAddressGeneratorStatic {
-    fn validate(&self) -> Result<()> {
+    fn validate(&self) -> Result<(), Error> {
         if self.address.is_empty() {
             Err(Error::ErrListeningAddressInvalid)
         } else {
@@ -166,7 +166,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorStatic {
         &self,
         use_ipv4: bool,
         requested_port: u16,
-    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr)> {
+    ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let addr = self
             .net
             .resolve_addr(use_ipv4, &format!("{}:{}", self.address, requested_port))

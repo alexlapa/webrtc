@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::stun::{self, attributes::*, checks::*, message::*};
+use crate::stun::{self, attrs::*, checks::*, msg::*};
 
 // 16 bits of uint + 16 bits of RFFU = 0.
 const CHANNEL_NUMBER_SIZE: usize = 4;
@@ -75,31 +75,6 @@ mod channnum_test {
         Ok(())
     }
 
-    // #[test]
-    // fn test_channel_number_NoAlloc() -> Result<(), stun::Error> {
-    // let mut m = Message::default();
-    //
-    // if wasAllocs(func() {
-    // Case with ChannelNumber on stack.
-    // n: = ChannelNumber(6)
-    // n.AddTo(m) //nolint
-    // m.Reset()
-    // }) {
-    // t.Error("Unexpected allocations")
-    // }
-    //
-    // n: = ChannelNumber(12)
-    // nP: = &n
-    // if wasAllocs(func() {
-    // On heap.
-    // nP.AddTo(m) //nolint
-    // m.Reset()
-    // }) {
-    // t.Error("Unexpected allocations")
-    // }
-    // Ok(())
-    // }
-
     #[test]
     fn test_channel_number_add_to() -> Result<(), stun::Error> {
         let mut m = Message::new();
@@ -133,8 +108,9 @@ mod channnum_test {
                 m.add(ATTR_CHANNEL_NUMBER, &[1, 2, 3]);
 
                 if let Err(err) = n_handle.get_from(&m) {
-                    assert!(
-                        is_attr_size_invalid(&err),
+                    assert_eq!(
+                        err,
+                        stun::Error::ErrAttributeSizeInvalid,
                         "IsAttrSizeInvalid should be true"
                     );
                 } else {

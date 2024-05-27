@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::stun::{self, attributes::*, checks::*, message::*};
+use crate::stun::{self, attrs::*, checks::*, msg::*};
 
 // Values for RequestedAddressFamily as defined in RFC 6156 Section 4.1.1.
 pub const REQUESTED_FAMILY_IPV4: RequestedAddressFamily = RequestedAddressFamily(0x01);
@@ -116,8 +116,9 @@ mod reqfamily_test {
                 }
                 m.add(ATTR_REQUESTED_ADDRESS_FAMILY, &[1, 2, 3]);
                 if let Err(err) = handle.get_from(&m) {
-                    assert!(
-                        is_attr_size_invalid(&err),
+                    assert_eq!(
+                        err,
+                        stun::Error::ErrAttributeSizeInvalid,
                         "IsAttrSizeInvalid should be true"
                     );
                 } else {

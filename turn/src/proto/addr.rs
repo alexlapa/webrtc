@@ -63,10 +63,9 @@ mod addr_test {
     use std::net::Ipv4Addr;
 
     use super::*;
-    use crate::error::Result;
 
     #[test]
-    fn test_addr_from_socket_addr() -> Result<()> {
+    fn test_addr_from_socket_addr() {
         let u = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 1234);
 
         let a = Addr::from_socket_addr(&u);
@@ -75,12 +74,10 @@ mod addr_test {
             "not equal"
         );
         assert_eq!(a.network(), "turn", "unexpected network");
-
-        Ok(())
     }
 
     #[test]
-    fn test_addr_equal_ip() -> Result<()> {
+    fn test_addr_equal_ip() {
         let a = Addr {
             ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             port: 1337,
@@ -91,12 +88,10 @@ mod addr_test {
         };
         assert_ne!(a, b, "a != b");
         assert!(a.equal_ip(&b), "a.IP should equal to b.IP");
-
-        Ok(())
     }
 
     #[test]
-    fn test_five_tuple_equal() -> Result<()> {
+    fn test_five_tuple_equal() {
         let tests = vec![
             ("blank", FiveTuple::default(), FiveTuple::default(), true),
             (
@@ -138,12 +133,10 @@ mod addr_test {
             let v = a == b;
             assert_eq!(v, r, "({name}) {a} [{v}!={r}] {b}");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_five_tuple_string() -> Result<()> {
+    fn test_five_tuple_string() {
         let s = FiveTuple {
             proto: PROTO_UDP,
             server: Addr {
@@ -161,7 +154,5 @@ mod addr_test {
             s, "127.0.0.1:200->127.0.0.1:100 (UDP)",
             "unexpected stringer output"
         );
-
-        Ok(())
     }
 }

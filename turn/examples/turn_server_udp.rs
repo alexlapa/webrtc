@@ -6,12 +6,15 @@ use std::{
 };
 
 use clap::{App, AppSettings, Arg};
-use tokio::{net::UdpSocket, time::Duration};
+use tokio::{
+    net::{TcpListener, UdpSocket},
+    time::Duration,
+};
 use turn::{
     auth::*,
+    net::Net,
     relay::RelayAddressGeneratorRanges,
     server::{config::*, *},
-    util::vnet::net::*,
     Error,
 };
 
@@ -115,20 +118,34 @@ async fn main() -> Result<(), Error> {
     // turn itself doesn't allocate any UDP sockets, but lets the user pass them
     // in this allows us to add logging, storage or modify inbound/outbound
     // traffic
-    let conn = Arc::new(UdpSocket::bind(format!("0.0.0.0:{port}")).await?);
-    println!("listening {}...", conn.local_addr()?);
+    let udp_conn = Arc::new(UdpSocket::bind(format!("0.0.0.0:{port}")).await?);
+    let tcp_conn = Arc::new(TcpListener::bind(format!("0.0.0.0:{port}")).await?);
+    println!("listening {}...", udp_conn.local_addr()?);
     let server = Server::new(ServerConfig {
-        conn_configs: vec![ConnConfig {
-            conn,
-            relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
-                relay_address: IpAddr::from_str(public_ip)?,
-                min_port: 49152,
-                max_port: 65535,
-                max_retries: 5,
-                address: "0.0.0.0".to_owned(),
-                net: Arc::new(Net::new()),
-            }),
-        }],
+        conn_configs: vec![
+            ConnConfig {
+                conn: udp_conn,
+                relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
+                    relay_address: IpAddr::from_str(public_ip)?,
+                    min_port: 49152,
+                    max_port: 65535,
+                    max_retries: 5,
+                    address: "0.0.0.0".to_owned(),
+                    net: Arc::new(Net::default()),
+                }),
+            },
+            ConnConfig {
+                conn: tcp_conn,
+                relay_addr_generator: Box::new(RelayAddressGeneratorRanges {
+                    relay_address: IpAddr::from_str(public_ip)?,
+                    min_port: 49152,
+                    max_port: 65535,
+                    max_retries: 5,
+                    address: "0.0.0.0".to_owned(),
+                    net: Arc::new(Net::default()),
+                }),
+            },
+        ],
         realm: realm.to_owned(),
         auth_handler: Arc::new(MyAuthHandler::new(cred_map)),
         channel_bind_timeout: Duration::from_secs(0),

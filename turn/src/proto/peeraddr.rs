@@ -3,7 +3,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
 };
 
-use crate::stun::{self, attributes::*, message::*, xoraddr::*};
+use crate::stun::{self, attrs::*, msg::*, xoraddr::*};
 
 /// `PeerAddress` implements `XOR-PEER-ADDRESS` attribute.
 ///

@@ -1,9 +1,10 @@
+use crate::stun;
 use std::{
     fmt,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
-use crate::stun::{addr::*, attributes::*, checks::*, error::*, message::*};
+use crate::stun::{addr::*, attrs::*, checks::*, error::*, msg::*};
 
 fn safe_xor_bytes(dst: &mut [u8], a: &[u8], b: &[u8]) -> usize {
     let mut n = a.len();
@@ -22,9 +23,6 @@ fn safe_xor_bytes(dst: &mut [u8], a: &[u8], b: &[u8]) -> usize {
 /// xor_bytes xors the bytes in a and b. The destination is assumed to have
 /// enough space. Returns the number of bytes xor'd.
 pub fn xor_bytes(dst: &mut [u8], a: &[u8], b: &[u8]) -> usize {
-    // TODO: if supportsUnaligned {
-    // 	return fastXORBytes(dst, a, b)
-    //}
     safe_xor_bytes(dst, a, b)
 }
 
@@ -62,7 +60,7 @@ impl fmt::Display for XorMappedAddress {
 impl Setter for XorMappedAddress {
     /// add_to adds XOR-MAPPED-ADDRESS to m. Can return ErrBadIPLength
     /// if len(a.IP) is invalid.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         self.add_to_as(m, ATTR_XORMAPPED_ADDRESS)
     }
 }
@@ -72,21 +70,20 @@ impl Getter for XorMappedAddress {
     /// error if any. While decoding, a.IP is reused if possible and can be
     /// rendered to invalid state (e.g. if a.IP was set to IPv6 and then
     /// IPv4 value were decoded into it), be careful.
-    fn get_from(&mut self, m: &Message) -> Result<()> {
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error> {
         self.get_from_as(m, ATTR_XORMAPPED_ADDRESS)
     }
 }
 
 impl XorMappedAddress {
     /// add_to_as adds XOR-MAPPED-ADDRESS value to m as t attribute.
-    pub fn add_to_as(&self, m: &mut Message, t: AttrType) -> Result<()> {
+    pub fn add_to_as(&self, m: &mut Message, t: AttrType) -> Result<(), stun::Error> {
         let (family, ip_len, ip) = match self.ip {
             IpAddr::V4(ipv4) => (FAMILY_IPV4, IPV4LEN, ipv4.octets().to_vec()),
             IpAddr::V6(ipv6) => (FAMILY_IPV6, IPV6LEN, ipv6.octets().to_vec()),
         };
 
         let mut value = [0; 32 + 128];
-        // value[0] = 0 // first 8 bits are zeroes
         let mut xor_value = vec![0; IPV6LEN];
         xor_value[4..].copy_from_slice(&m.transaction_id.0);
         xor_value[0..4].copy_from_slice(&MAGIC_COOKIE.to_be_bytes());
@@ -99,7 +96,7 @@ impl XorMappedAddress {
 
     /// get_from_as decodes XOR-MAPPED-ADDRESS attribute value in message
     /// getting it as for t type.
-    pub fn get_from_as(&mut self, m: &Message, t: AttrType) -> Result<()> {
+    pub fn get_from_as(&mut self, m: &Message, t: AttrType) -> Result<(), stun::Error> {
         let v = m.get(t)?;
         if v.len() <= 4 {
             return Err(Error::ErrUnexpectedEof);
@@ -147,7 +144,7 @@ mod xoraddr_test {
     use super::*;
 
     #[test]
-    fn test_xor_safe() -> Result<()> {
+    fn test_xor_safe() {
         let mut dst = vec![0; 8];
         let a = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let b = vec![8, 7, 7, 6, 6, 3, 4, 1];
@@ -157,12 +154,10 @@ mod xoraddr_test {
         for i in 0..dst.len() {
             assert_eq!(b[i], dst[i], "{} != {}", b[i], dst[i]);
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_xor_safe_bsmaller() -> Result<()> {
+    fn test_xor_safe_bsmaller() {
         let mut dst = vec![0; 5];
         let a = vec![1, 2, 3, 4, 5, 6, 7, 8];
         let b = vec![8, 7, 7, 6, 6];
@@ -172,12 +167,10 @@ mod xoraddr_test {
         for i in 0..dst.len() {
             assert_eq!(b[i], dst[i], "{} != {}", b[i], dst[i]);
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_xormapped_address_get_from() -> Result<()> {
+    fn test_xormapped_address_get_from() {
         let mut m = Message::new();
         let transaction_id = BASE64_STANDARD.decode("jxhBARZwX+rsC6er").unwrap();
         m.transaction_id.0.copy_from_slice(&transaction_id);
@@ -187,7 +180,7 @@ mod xoraddr_test {
             ip: "0.0.0.0".parse().unwrap(),
             port: 0,
         };
-        addr.get_from(&m)?;
+        addr.get_from(&m).unwrap();
         assert_eq!(
             addr.ip.to_string(),
             "213.141.156.236",
@@ -232,20 +225,19 @@ mod xoraddr_test {
             };
             let result = addr.get_from(&m);
             if let Err(err) = result {
-                assert!(
-                    is_attr_size_overflow(&err),
+                assert_eq!(
+                    err,
+                    stun::Error::ErrAttributeSizeOverflow,
                     "AddTo should return AttrOverflowErr, got: {err}"
                 );
             } else {
                 panic!("expected error, got ok");
             }
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_xormapped_address_get_from_invalid() -> Result<()> {
+    fn test_xormapped_address_get_from_invalid() {
         let mut m = Message::new();
         let transaction_id = BASE64_STANDARD.decode("jxhBARZwX+rsC6er").unwrap();
         m.transaction_id.0.copy_from_slice(&transaction_id);
@@ -260,22 +252,20 @@ mod xoraddr_test {
 
         addr.ip = expected_ip;
         addr.port = expected_port;
-        addr.add_to(&mut m)?;
+        addr.add_to(&mut m).unwrap();
         m.write_header();
 
         let mut m_res = Message::new();
         m.raw[20 + 4 + 1] = 0x21;
-        m.decode()?;
+        m.decode().unwrap();
         let mut reader = BufReader::new(m.raw.as_slice());
-        m_res.read_from(&mut reader)?;
+        m_res.read_from(&mut reader).unwrap();
         let result = addr.get_from(&m);
         assert!(result.is_err(), "should be error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_xormapped_address_add_to() -> Result<()> {
+    fn test_xormapped_address_add_to() {
         let mut m = Message::new();
         let transaction_id = BASE64_STANDARD.decode("jxhBARZwX+rsC6er").unwrap();
         m.transaction_id.0.copy_from_slice(&transaction_id);
@@ -285,12 +275,12 @@ mod xoraddr_test {
             ip: "213.141.156.236".parse().unwrap(),
             port: expected_port,
         };
-        addr.add_to(&mut m)?;
+        addr.add_to(&mut m).unwrap();
         m.write_header();
 
         let mut m_res = Message::new();
-        m_res.write(&m.raw)?;
-        addr.get_from(&m_res)?;
+        m_res.write(&m.raw).unwrap();
+        addr.get_from(&m_res).unwrap();
         assert_eq!(
             addr.ip, expected_ip,
             "{} (got) != {} (expected)",
@@ -302,12 +292,10 @@ mod xoraddr_test {
             "bad Port {} != {}",
             addr.port, expected_port
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_xormapped_address_add_to_ipv6() -> Result<()> {
+    fn test_xormapped_address_add_to_ipv6() {
         let mut m = Message::new();
         let transaction_id = BASE64_STANDARD.decode("jxhBARZwX+rsC6er").unwrap();
         m.transaction_id.0.copy_from_slice(&transaction_id);
@@ -317,18 +305,18 @@ mod xoraddr_test {
             ip: "fe80::dc2b:44ff:fe20:6009".parse().unwrap(),
             port: 21254,
         };
-        addr.add_to(&mut m)?;
+        addr.add_to(&mut m).unwrap();
         m.write_header();
 
         let mut m_res = Message::new();
         let mut reader = BufReader::new(m.raw.as_slice());
-        m_res.read_from(&mut reader)?;
+        m_res.read_from(&mut reader).unwrap();
 
         let mut got_addr = XorMappedAddress {
             ip: "0.0.0.0".parse().unwrap(),
             port: 0,
         };
-        got_addr.get_from(&m)?;
+        got_addr.get_from(&m).unwrap();
 
         assert_eq!(
             got_addr.ip, expected_ip,
@@ -340,12 +328,10 @@ mod xoraddr_test {
             "bad Port {} != {}",
             got_addr.port, expected_port
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_xormapped_address_string() -> Result<()> {
+    fn test_xormapped_address_string() {
         let tests = vec![
             (
                 // 0
@@ -372,7 +358,5 @@ mod xoraddr_test {
                 " XORMappesAddress.String() {addr} (got) != {ip} (expected)",
             );
         }
-
-        Ok(())
     }
 }

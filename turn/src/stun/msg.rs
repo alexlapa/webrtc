@@ -3,10 +3,11 @@ use std::{
     io::{Read, Write},
 };
 
+use crate::stun;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use rand::Rng;
 
-use crate::stun::{agent::*, attributes::*, error::*};
+use crate::stun::{agent::*, attrs::*, error::*};
 
 // MAGIC_COOKIE is fixed value that aids in distinguishing STUN packets
 // from packets of other protocols when STUN is multiplexed with those
@@ -27,25 +28,19 @@ pub const TRANSACTION_ID_SIZE: usize = 12; // 96 bit
 // or helpers for message fields as type or transaction id.
 pub trait Setter {
     // Setter sets *Message attribute.
-    fn add_to(&self, m: &mut Message) -> Result<()>;
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error>;
 }
 
 // Getter parses attribute from *Message.
 pub trait Getter {
-    fn get_from(&mut self, m: &Message) -> Result<()>;
+    fn get_from(&mut self, m: &Message) -> Result<(), stun::Error>;
 }
 
 // Checker checks *Message attribute.
 pub trait Checker {
-    fn check(&self, m: &Message) -> Result<()>;
+    fn check(&self, m: &Message) -> Result<(), stun::Error>;
 }
 
-// is_message returns true if b looks like STUN message.
-// Useful for multiplexing. is_message does not guarantee
-// that decoding will be successful.
-pub fn is_message(b: &[u8]) -> bool {
-    b.len() >= MESSAGE_HEADER_SIZE && u32::from_be_bytes([b[4], b[5], b[6], b[7]]) == MAGIC_COOKIE
-}
 // Message represents a single STUN packet. It uses aggressive internal
 // buffering to enable zero-allocation encoding and decoding,
 // so there are some usage constraints:
@@ -101,7 +96,7 @@ impl Setter for Message {
     // add_to sets b.TransactionID to m.TransactionID.
     //
     // Implements Setter to aid in crafting responses.
-    fn add_to(&self, b: &mut Message) -> Result<()> {
+    fn add_to(&self, b: &mut Message) -> Result<(), stun::Error> {
         b.transaction_id = self.transaction_id;
         b.write_transaction_id();
         Ok(())
@@ -122,14 +117,14 @@ impl Message {
     }
 
     // marshal_binary implements the encoding.BinaryMarshaler interface.
-    pub fn marshal_binary(&self) -> Result<Vec<u8>> {
+    pub fn marshal_binary(&self) -> Result<Vec<u8>, stun::Error> {
         // We can't return m.Raw, allocation is expected by implicit interface
         // contract induced by other implementations.
         Ok(self.raw.clone())
     }
 
     // unmarshal_binary implements the encoding.BinaryUnmarshaler interface.
-    pub fn unmarshal_binary(&mut self, data: &[u8]) -> Result<()> {
+    pub fn unmarshal_binary(&mut self, data: &[u8]) -> Result<(), stun::Error> {
         // We can't retain data, copy is expected by interface contract.
         self.raw.clear();
         self.raw.extend_from_slice(data);
@@ -138,7 +133,7 @@ impl Message {
 
     // NewTransactionID sets m.TransactionID to random value from crypto/rand
     // and returns error if any.
-    pub fn new_transaction_id(&mut self) -> Result<()> {
+    pub fn new_transaction_id(&mut self) -> Result<(), stun::Error> {
         rand::thread_rng().fill(&mut self.transaction_id.0);
         self.write_transaction_id();
         Ok(())
@@ -268,7 +263,7 @@ impl Message {
     }
 
     // Decode decodes m.Raw into m.
-    pub fn decode(&mut self) -> Result<()> {
+    pub fn decode(&mut self) -> Result<(), stun::Error> {
         // decoding message header
         let buf = &self.raw;
         if buf.len() < MESSAGE_HEADER_SIZE {
@@ -347,7 +342,7 @@ impl Message {
 
     // WriteTo implements WriterTo via calling Write(m.Raw) on w and returning
     // call result.
-    pub fn write_to<W: Write>(&self, writer: &mut W) -> Result<usize> {
+    pub fn write_to<W: Write>(&self, writer: &mut W) -> Result<usize, stun::Error> {
         let n = writer.write(&self.raw)?;
         Ok(n)
     }
@@ -357,7 +352,7 @@ impl Message {
     // ErrUnexpectedEOF, ErrUnexpectedHeaderEOF or *DecodeErr.
     //
     // Can return *DecodeErr while decoding too.
-    pub fn read_from<R: Read>(&mut self, reader: &mut R) -> Result<usize> {
+    pub fn read_from<R: Read>(&mut self, reader: &mut R) -> Result<usize, stun::Error> {
         let mut t_buf = vec![0; DEFAULT_RAW_CAPACITY];
         let n = reader.read(&mut t_buf)?;
         self.raw = t_buf[..n].to_vec();
@@ -368,7 +363,7 @@ impl Message {
     // Write decodes message and return error if any.
     //
     // Any error is unrecoverable, but message could be partially decoded.
-    pub fn write(&mut self, t_buf: &[u8]) -> Result<usize> {
+    pub fn write(&mut self, t_buf: &[u8]) -> Result<usize, stun::Error> {
         self.raw.clear();
         self.raw.extend_from_slice(t_buf);
         self.decode()?;
@@ -376,7 +371,7 @@ impl Message {
     }
 
     // CloneTo clones m to b securing any further m mutations.
-    pub fn clone_to(&self, b: &mut Message) -> Result<()> {
+    pub fn clone_to(&self, b: &mut Message) -> Result<(), stun::Error> {
         b.raw.clear();
         b.raw.extend_from_slice(&self.raw);
         b.decode()
@@ -395,7 +390,7 @@ impl Message {
     // get returns byte slice that represents attribute value,
     // if there is no attribute with such type,
     // ErrAttributeNotFound is returned.
-    pub fn get(&self, t: AttrType) -> Result<Vec<u8>> {
+    pub fn get(&self, t: AttrType) -> Result<Vec<u8>, stun::Error> {
         let (v, ok) = self.attributes.get(t);
         if ok {
             Ok(v.value)
@@ -419,7 +414,7 @@ impl Message {
     //  m.Build(&t, &username, &nonce, &realm) // 0 allocations
     //
     // See BenchmarkBuildOverhead.
-    pub fn build(&mut self, setters: &[Box<dyn Setter>]) -> Result<()> {
+    pub fn build(&mut self, setters: &[Box<dyn Setter>]) -> Result<(), stun::Error> {
         self.reset();
         self.write_header();
         for s in setters {
@@ -429,7 +424,7 @@ impl Message {
     }
 
     // Check applies checkers to message in batch, returning on first error.
-    pub fn check<C: Checker>(&self, checkers: &[C]) -> Result<()> {
+    pub fn check<C: Checker>(&self, checkers: &[C]) -> Result<(), stun::Error> {
         for c in checkers {
             c.check(self)?;
         }
@@ -437,7 +432,7 @@ impl Message {
     }
 
     // Parse applies getters to message in batch, returning on first error.
-    pub fn parse<G: Getter>(&self, getters: &mut [G]) -> Result<()> {
+    pub fn parse<G: Getter>(&self, getters: &mut [G]) -> Result<(), stun::Error> {
         for c in getters {
             c.get_from(self)?;
         }
@@ -518,21 +513,10 @@ pub struct MessageType {
     pub class: MessageClass, // e.g. request
 }
 
-// Common STUN message types.
-// Binding request message type.
-pub const BINDING_REQUEST: MessageType = MessageType {
-    method: METHOD_BINDING,
-    class: CLASS_REQUEST,
-};
 // Binding success response message type
 pub const BINDING_SUCCESS: MessageType = MessageType {
     method: METHOD_BINDING,
     class: CLASS_SUCCESS_RESPONSE,
-};
-// Binding error response message type.
-pub const BINDING_ERROR: MessageType = MessageType {
-    method: METHOD_BINDING,
-    class: CLASS_ERROR_RESPONSE,
 };
 
 impl fmt::Display for MessageType {
@@ -559,7 +543,7 @@ const CLASS_C1SHIFT: u16 = 7;
 
 impl Setter for MessageType {
     // add_to sets m type to t.
-    fn add_to(&self, m: &mut Message) -> Result<()> {
+    fn add_to(&self, m: &mut Message) -> Result<(), stun::Error> {
         m.set_type(*self);
         Ok(())
     }
@@ -628,12 +612,10 @@ mod message_test {
     use std::io::{BufReader, BufWriter};
 
     use super::*;
-    use crate::stun::{
-        fingerprint::FINGERPRINT, integrity::MessageIntegrity, textattrs::TextAttribute, xoraddr::*,
-    };
+    use crate::stun::{textattrs::TextAttribute, xoraddr::*};
 
     #[test]
-    fn test_message_buffer() -> Result<()> {
+    fn test_message_buffer() {
         let mut m = Message::new();
         m.typ = MessageType {
             method: METHOD_BINDING,
@@ -645,15 +627,13 @@ mod message_test {
 
         let mut m_decoded = Message::new();
         let mut reader = BufReader::new(m.raw.as_slice());
-        m_decoded.read_from(&mut reader)?;
+        m_decoded.read_from(&mut reader).unwrap();
 
         assert_eq!(m_decoded, m, "{m_decoded} != {m}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_type_value() -> Result<()> {
+    fn test_message_type_value() {
         let tests = vec![
             (
                 MessageType {
@@ -689,12 +669,10 @@ mod message_test {
             let b = input.value();
             assert_eq!(b, output, "Value({input}) -> {b}, want {output}");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_type_read_value() -> Result<()> {
+    fn test_message_type_read_value() {
         let tests = vec![
             (
                 0x0001,
@@ -724,12 +702,10 @@ mod message_test {
             m.read_value(input);
             assert_eq!(m, output, "ReadValue({input}) -> {m}, want {output}");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_type_read_write_value() -> Result<()> {
+    fn test_message_type_read_write_value() {
         let tests = vec![
             MessageType {
                 method: METHOD_BINDING,
@@ -755,12 +731,10 @@ mod message_test {
             m.read_value(v);
             assert_eq!(m, test, "ReadValue({test} -> {v}) = {m}, should be {test}");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_write_to() -> Result<()> {
+    fn test_message_write_to() {
         let mut m = Message::new();
         m.typ = MessageType {
             method: METHOD_BINDING,
@@ -772,41 +746,35 @@ mod message_test {
         let mut buf = vec![];
         {
             let mut writer = BufWriter::<&mut Vec<u8>>::new(buf.as_mut());
-            m.write_to(&mut writer)?;
+            m.write_to(&mut writer).unwrap();
         }
 
         let mut m_decoded = Message::new();
         let mut reader = BufReader::new(buf.as_slice());
-        m_decoded.read_from(&mut reader)?;
+        m_decoded.read_from(&mut reader).unwrap();
         assert_eq!(m_decoded, m, "{m_decoded} != {m}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_cookie() -> Result<()> {
+    fn test_message_cookie() {
         let buf = vec![0; 20];
         let mut m_decoded = Message::new();
         let mut reader = BufReader::new(buf.as_slice());
         let result = m_decoded.read_from(&mut reader);
         assert!(result.is_err(), "should error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_length_less_header_size() -> Result<()> {
+    fn test_message_length_less_header_size() {
         let buf = vec![0; 8];
         let mut m_decoded = Message::new();
         let mut reader = BufReader::new(buf.as_slice());
         let result = m_decoded.read_from(&mut reader);
         assert!(result.is_err(), "should error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_bad_length() -> Result<()> {
+    fn test_message_bad_length() {
         let m_type = MessageType {
             method: METHOD_BINDING,
             class: CLASS_REQUEST,
@@ -824,12 +792,10 @@ mod message_test {
         let mut m_decoded = Message::new();
         let result = m_decoded.write(&m.raw);
         assert!(result.is_err(), "should error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_attr_length_less_than_header() -> Result<()> {
+    fn test_message_attr_length_less_than_header() {
         let m_type = MessageType {
             method: METHOD_BINDING,
             class: CLASS_REQUEST,
@@ -854,12 +820,10 @@ mod message_test {
         let mut reader = BufReader::new(&m.raw[..20 + 2]);
         let result = m_decoded.read_from(&mut reader);
         assert!(result.is_err(), "should be error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_attr_size_less_than_length() -> Result<()> {
+    fn test_message_attr_size_less_than_length() {
         let m_type = MessageType {
             method: METHOD_BINDING,
             class: CLASS_REQUEST,
@@ -884,23 +848,19 @@ mod message_test {
         let mut reader = BufReader::new(&m.raw[..20 + 5]);
         let result = m_decoded.read_from(&mut reader);
         assert!(result.is_err(), "should be error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_read_from_error() -> Result<()> {
+    fn test_message_read_from_error() {
         let mut m_decoded = Message::new();
         let buf = vec![];
         let mut reader = BufReader::new(buf.as_slice());
         let result = m_decoded.read_from(&mut reader);
         assert!(result.is_err(), "should be error");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_class_string() -> Result<()> {
+    fn test_message_class_string() {
         let v = vec![
             CLASS_REQUEST,
             CLASS_ERROR_RESPONSE,
@@ -917,12 +877,10 @@ mod message_test {
         // should panic
         let p = MessageClass(0x05).to_string();
         assert_eq!(p, "unknown message class", "should be error {p}");
-
-        Ok(())
     }
 
     #[test]
-    fn test_attr_type_string() -> Result<()> {
+    fn test_attr_type_string() {
         let v = vec![
             ATTR_MAPPED_ADDRESS,
             ATTR_USERNAME,
@@ -945,12 +903,10 @@ mod message_test {
             v_non_standard.to_string().starts_with("0x512"),
             "bad prefix"
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_method_string() -> Result<()> {
+    fn test_method_string() {
         assert_eq!(
             METHOD_BINDING.to_string(),
             "Binding".to_owned(),
@@ -962,12 +918,10 @@ mod message_test {
             "Bad stringer {}",
             Method(0x616)
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_attribute_equal() -> Result<()> {
+    fn test_attribute_equal() {
         let a = RawAttribute {
             length: 2,
             value: vec![0x1, 0x2],
@@ -1013,12 +967,10 @@ mod message_test {
             },
             "should not equal"
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_equal() -> Result<()> {
+    fn test_message_equal() {
         let attr = RawAttribute {
             length: 2,
             value: vec![0x1, 0x2],
@@ -1164,161 +1116,41 @@ mod message_test {
             };
             assert_ne!(a, b, "should not equal");
         }
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_grow() -> Result<()> {
+    fn test_message_grow() {
         let mut m = Message::new();
         m.grow(512, false);
         assert_eq!(m.raw.len(), 512, "Bad length {}", m.raw.len());
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_grow_smaller() -> Result<()> {
+    fn test_message_grow_smaller() {
         let mut m = Message::new();
         m.grow(2, false);
         assert!(m.raw.capacity() >= 20, "Bad capacity {}", m.raw.capacity());
 
         assert!(m.raw.len() >= 20, "Bad length {}", m.raw.len());
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_string() -> Result<()> {
+    fn test_message_string() {
         let m = Message::new();
         assert_ne!(m.to_string(), "", "bad string");
-
-        Ok(())
     }
 
     #[test]
-    fn test_is_message() -> Result<()> {
-        let mut m = Message::new();
-        let a = TextAttribute {
-            attr: ATTR_SOFTWARE,
-            text: "software".to_owned(),
-        };
-        a.add_to(&mut m)?;
-        m.write_header();
-
-        let tests = vec![
-            (vec![], false),                           // 0
-            (vec![1, 2, 3], false),                    // 1
-            (vec![1, 2, 4], false),                    // 2
-            (vec![1, 2, 4, 5, 6, 7, 8, 9, 20], false), // 3
-            (m.raw.to_vec(), true),                    // 5
-            (
-                vec![
-                    0, 0, 0, 0, 33, 18, 164, 66, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                ],
-                true,
-            ), // 6
-        ];
-
-        for (input, output) in tests {
-            let got = is_message(&input);
-            assert_eq!(got, output, "IsMessage({input:?}) {got} != {output}");
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_message_contains() -> Result<()> {
+    fn test_message_contains() {
         let mut m = Message::new();
         m.add(ATTR_SOFTWARE, "value".as_bytes());
 
         assert!(m.contains(ATTR_SOFTWARE), "message should contain software");
         assert!(!m.contains(ATTR_NONCE), "message should not contain nonce");
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_full_size() -> Result<()> {
-        let mut m = Message::new();
-        m.build(&[
-            Box::new(BINDING_REQUEST),
-            Box::new(TransactionId([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 0])),
-            Box::new(TextAttribute::new(ATTR_SOFTWARE, "pion/stun".to_owned())),
-            Box::new(MessageIntegrity::new_long_term_integrity(
-                "username".to_owned(),
-                "realm".to_owned(),
-                "password".to_owned(),
-            )),
-            Box::new(FINGERPRINT),
-        ])?;
-        let l = m.raw.len();
-        m.raw = m.raw[..l - 10].to_vec();
-
-        let mut decoder = Message::new();
-        let l = m.raw.len();
-        decoder.raw = m.raw[..l - 10].to_vec();
-        let result = decoder.decode();
-        assert!(result.is_err(), "decode on truncated buffer should error");
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_message_clone_to() -> Result<()> {
-        let mut m = Message::new();
-        m.build(&[
-            Box::new(BINDING_REQUEST),
-            Box::new(TransactionId([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 0])),
-            Box::new(TextAttribute::new(ATTR_SOFTWARE, "pion/stun".to_owned())),
-            Box::new(MessageIntegrity::new_long_term_integrity(
-                "username".to_owned(),
-                "realm".to_owned(),
-                "password".to_owned(),
-            )),
-            Box::new(FINGERPRINT),
-        ])?;
-        m.encode();
-
-        let mut b = Message::new();
-        m.clone_to(&mut b)?;
-        assert_eq!(b, m, "not equal");
-
-        // TODO: Corrupting m and checking that b is not corrupted.
-        // let (mut s, ok) = b.attributes.get(ATTR_SOFTWARE);
-        // assert!(ok, "no software attribute");
-        // s.value[0] = b'k';
-        // s.add_to(&mut b)?;
-        // assert_ne!(b, m, "should not be equal");
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_message_add_to() -> Result<()> {
-        let mut m = Message::new();
-        m.build(&[
-            Box::new(BINDING_REQUEST),
-            Box::new(TransactionId([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 1, 0])),
-            Box::new(FINGERPRINT),
-        ])?;
-        m.encode();
-
-        let mut b = Message::new();
-        m.clone_to(&mut b)?;
-
-        m.transaction_id = TransactionId([1, 2, 3, 4, 5, 6, 7, 8, 9, 0, 2, 0]);
-        assert_ne!(b, m, "should not be equal");
-
-        m.add_to(&mut b)?;
-        assert_eq!(b, m, "should be equal");
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_decode() -> Result<()> {
+    fn test_decode() {
         let mut m = Message::new();
         m.typ = MessageType {
             method: METHOD_BINDING,
@@ -1331,17 +1163,15 @@ mod message_test {
         let mut m_decoded = Message::new();
         m_decoded.raw.clear();
         m_decoded.raw.extend_from_slice(&m.raw);
-        m_decoded.decode()?;
+        m_decoded.decode().unwrap();
         assert_eq!(
             m_decoded, m,
             "decoded result is not equal to encoded message"
         );
-
-        Ok(())
     }
 
     #[test]
-    fn test_message_marshal_binary() -> Result<()> {
+    fn test_message_marshal_binary() {
         let mut m = Message::new();
         m.build(&[
             Box::new(TextAttribute::new(ATTR_SOFTWARE, "software".to_owned())),
@@ -1349,14 +1179,15 @@ mod message_test {
                 ip: "213.1.223.5".parse().unwrap(),
                 port: 0,
             }),
-        ])?;
+        ])
+        .unwrap();
 
-        let mut data = m.marshal_binary()?;
+        let mut data = m.marshal_binary().unwrap();
         // Reset m.Raw to check retention.
         for i in 0..m.raw.len() {
             m.raw[i] = 0;
         }
-        m.unmarshal_binary(&data)?;
+        m.unmarshal_binary(&data).unwrap();
 
         // Reset data to check retention.
         #[allow(clippy::needless_range_loop)]
@@ -1364,8 +1195,6 @@ mod message_test {
             data[i] = 0;
         }
 
-        m.decode()?;
-
-        Ok(())
+        m.decode().unwrap();
     }
 }
