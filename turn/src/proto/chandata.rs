@@ -31,13 +31,6 @@ impl PartialEq for ChannelData {
 }
 
 impl ChannelData {
-    /// Resets length, [`Self::data`] and [`Self::raw`] length.
-    #[inline]
-    pub fn reset(&mut self) {
-        self.raw.clear();
-        self.data.clear();
-    }
-
     /// Encodes this to [`Self::raw`].
     pub fn encode(&mut self) {
         self.raw.clear();
@@ -230,21 +223,6 @@ mod chandata_test {
                 panic!("expected error, but got ok");
             }
         }
-    }
-
-    #[test]
-    fn test_channel_data_reset() {
-        let mut d = ChannelData {
-            data: vec![1, 2, 3, 4],
-            number: ChannelNumber(MIN_CHANNEL_NUMBER + 1),
-            ..Default::default()
-        };
-        d.encode();
-        let mut buf = vec![0; d.raw.len()];
-        buf.copy_from_slice(&d.raw);
-        d.reset();
-        d.raw = buf;
-        d.decode().unwrap();
     }
 
     #[test]

@@ -2,7 +2,7 @@ use std::{io, num::ParseIntError, time::SystemTimeError};
 
 use thiserror::Error;
 
-use crate::{net, stun};
+use crate::{con, stun};
 
 #[derive(Debug, Error, PartialEq)]
 #[non_exhaustive]
@@ -57,6 +57,8 @@ pub enum Error {
     ErrRequestWithReservationTokenAndReqAddressFamily,
     #[error("no allocation found")]
     ErrNoAllocationFound,
+    #[error("allocation requested unsupported proto")]
+    UsupportedRelayProto,
     #[error("unable to handle send-indication, no permission added")]
     ErrNoPermission,
     #[error("packet write smaller than packet")]
@@ -70,7 +72,7 @@ pub enum Error {
     #[error("{0}")]
     Io(#[source] IoError),
     #[error("{0}")]
-    Util(#[from] net::Error),
+    Util(#[from] con::Error),
     #[error("{0}")]
     Stun(#[from] stun::Error),
     #[error("{0}")]

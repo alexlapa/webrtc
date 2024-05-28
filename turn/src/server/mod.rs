@@ -19,8 +19,8 @@ use tokio::{
 use crate::{
     allocation::{allocation_manager::*, five_tuple::FiveTuple, AllocationInfo},
     auth::AuthHandler,
+    con::Conn,
     error::*,
-    net::Conn,
     proto::lifetime::DEFAULT_LIFETIME,
 };
 
@@ -39,7 +39,6 @@ impl Server {
     /// creates a new TURN server
     pub async fn new(config: ServerConfig) -> Result<Self, Error> {
         config.validate()?;
-        println!("Server::new 000");
         let (command_tx, _) = broadcast::channel(16);
         let mut s = Server {
             auth_handler: config.auth_handler,
@@ -48,11 +47,9 @@ impl Server {
             nonces: Arc::new(Mutex::new(HashMap::new())),
             command_tx: Mutex::new(Some(command_tx.clone())),
         };
-        println!("Server::new 111");
         if s.channel_bind_timeout == Duration::from_secs(0) {
             s.channel_bind_timeout = DEFAULT_LIFETIME;
         }
-        println!("Server::new 222");
         for p in config.conn_configs {
             let nonces = Arc::clone(&s.nonces);
             let auth_handler = Arc::clone(&s.auth_handler);
@@ -64,7 +61,7 @@ impl Server {
                 relay_addr_generator: p.relay_addr_generator,
                 alloc_close_notify: config.alloc_close_notify.clone(),
             }));
-            println!("Server::new 333");
+
             tokio::spawn(Server::read_loop(
                 conn,
                 allocation_manager,
@@ -74,9 +71,7 @@ impl Server {
                 channel_bind_timeout,
                 handle_rx,
             ));
-            println!("Server::new 444");
         }
-        println!("Server::new 555");
         Ok(s)
     }
 
@@ -154,7 +149,6 @@ impl Server {
         channel_bind_timeout: Duration,
         mut handle_rx: broadcast::Receiver<Command>,
     ) {
-        println!("read_loop 000");
         let mut buf = vec![0u8; INBOUND_MTU];
 
         let (mut close_tx, mut close_rx) = oneshot::channel::<()>();
@@ -164,7 +158,6 @@ impl Server {
 
             async move {
                 loop {
-                    println!("read_loop 111");
                     match handle_rx.recv().await {
                         Ok(Command::DeleteAllocations(name, completion)) => {
                             allocation_manager
@@ -198,7 +191,6 @@ impl Server {
         });
 
         loop {
-            println!("read_loop 222");
             let (n, addr) = tokio::select! {
                 v = conn.recv_from(&mut buf) => {
                     match v {
@@ -221,6 +213,11 @@ impl Server {
                 auth_handler: Arc::clone(&auth_handler),
                 realm: realm.clone(),
                 channel_bind_timeout,
+                five_tuple: FiveTuple {
+                    src_addr: addr,
+                    dst_addr: conn.local_addr(),
+                    protocol: conn.proto(),
+                },
             };
 
             if let Err(err) = r.handle_request().await {

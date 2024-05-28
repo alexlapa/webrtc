@@ -6,8 +6,9 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
+    con::{self, Conn, Net},
     error::*,
-    net::{Conn, Net},
+    proto::Protocol,
 };
 
 /// `RelayAddressGenerator` is used to generate a Relay Address when creating an
@@ -22,6 +23,7 @@ pub trait RelayAddressGenerator {
         &self,
         use_ipv4: bool,
         requested_port: u16,
+        protocol: Protocol,
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error>;
 }
 
@@ -68,6 +70,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
         &self,
         use_ipv4: bool,
         requested_port: u16,
+        protocol: Protocol,
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let max_retries = if self.max_retries == 0 {
             10
@@ -76,28 +79,23 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
         };
 
         if requested_port != 0 {
-            let addr = self
-                .net
-                .resolve_addr(use_ipv4, &format!("{}:{}", self.address, requested_port))
-                .await?;
-            let conn = self.net.bind(addr).await?;
-            let mut relay_addr = conn.local_addr()?;
+            let addr =
+                con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
+            let conn = self.net.bind(addr, protocol).await?;
+            let mut relay_addr = conn.local_addr();
             relay_addr.set_ip(self.relay_address);
             return Ok((conn, relay_addr));
         }
 
         for _ in 0..max_retries {
             let port = self.min_port + rand::random::<u16>() % (self.max_port - self.min_port + 1);
-            let addr = self
-                .net
-                .resolve_addr(use_ipv4, &format!("{}:{}", self.address, port))
-                .await?;
-            let conn = match self.net.bind(addr).await {
+            let addr = con::lookup_host(use_ipv4, &format!("{}:{}", self.address, port)).await?;
+            let conn = match self.net.bind(addr, protocol).await {
                 Ok(conn) => conn,
                 Err(_) => continue,
             };
 
-            let mut relay_addr = conn.local_addr()?;
+            let mut relay_addr = conn.local_addr();
             relay_addr.set_ip(self.relay_address);
             return Ok((conn, relay_addr));
         }
@@ -127,13 +125,12 @@ impl RelayAddressGenerator for RelayAddressGeneratorNone {
         &self,
         use_ipv4: bool,
         requested_port: u16,
+        protocol: Protocol,
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
-        let addr = self
-            .net
-            .resolve_addr(use_ipv4, &format!("{}:{}", self.address, requested_port))
-            .await?;
-        let conn = self.net.bind(addr).await?;
-        let relay_addr = conn.local_addr()?;
+        let addr =
+            con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
+        let conn = self.net.bind(addr, protocol).await?;
+        let relay_addr = conn.local_addr();
         Ok((conn, relay_addr))
     }
 }
@@ -166,13 +163,12 @@ impl RelayAddressGenerator for RelayAddressGeneratorStatic {
         &self,
         use_ipv4: bool,
         requested_port: u16,
+        protocol: Protocol,
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
-        let addr = self
-            .net
-            .resolve_addr(use_ipv4, &format!("{}:{}", self.address, requested_port))
-            .await?;
-        let conn = self.net.bind(addr).await?;
-        let mut relay_addr = conn.local_addr()?;
+        let addr =
+            con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
+        let conn = self.net.bind(addr, protocol).await?;
+        let mut relay_addr = conn.local_addr();
         relay_addr.set_ip(self.relay_address);
         return Ok((conn, relay_addr));
     }

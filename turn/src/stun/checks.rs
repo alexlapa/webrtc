@@ -12,12 +12,6 @@ pub fn check_size(_at: AttrType, got: usize, expected: usize) -> Result<(), stun
     }
 }
 
-// is_attr_size_invalid returns true if error means that attribute size is
-// invalid.
-pub fn is_attr_size_invalid(err: &Error) -> bool {
-    Error::ErrAttributeSizeInvalid == *err
-}
-
 pub(crate) fn check_hmac(got: &[u8], expected: &[u8]) -> Result<(), stun::Error> {
     if got.ct_eq(expected).unwrap_u8() != 1 {
         Err(Error::ErrIntegrityMismatch)

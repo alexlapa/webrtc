@@ -1,4 +1,3 @@
-pub mod addr;
 pub mod chandata;
 pub mod channum;
 pub mod data;
@@ -12,10 +11,6 @@ pub mod reqtrans;
 pub mod rsrvtoken;
 
 use std::fmt;
-
-use crate::stun::msg::*;
-
-// proto implements RFC 5766 Traversal Using Relays around NAT.
 
 /// `Protocol` is IANA assigned protocol number.
 #[derive(PartialEq, Eq, Default, Debug, Clone, Copy, Hash)]
@@ -40,31 +35,9 @@ impl fmt::Display for Protocol {
     }
 }
 
-// Default ports for TURN from RFC 5766 Section 4.
-
-/// Shorthand for create permission request type.
-pub fn create_permission_request() -> MessageType {
-    MessageType::new(METHOD_CREATE_PERMISSION, CLASS_REQUEST)
-}
-
-/// Shorthand for allocation request message type.
-pub fn allocate_request() -> MessageType {
-    MessageType::new(METHOD_ALLOCATE, CLASS_REQUEST)
-}
-
-/// Shorthand for send indication message type.
-pub fn send_indication() -> MessageType {
-    MessageType::new(METHOD_SEND, CLASS_INDICATION)
-}
-
-/// Shorthand for refresh request message type.
-pub fn refresh_request() -> MessageType {
-    MessageType::new(METHOD_REFRESH, CLASS_REQUEST)
-}
-
 #[cfg(test)]
 mod proto_test {
-    use super::*;
+    use crate::stun::msg::Message;
 
     #[rustfmt::skip]
     const CHROME_ALLOC_REQ_TEST_HEX: [&str; 4] = [

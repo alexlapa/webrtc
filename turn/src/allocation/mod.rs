@@ -13,10 +13,6 @@ use std::{
     },
 };
 
-use crate::{
-    net::Conn,
-    stun::{agent::*, msg::*, textattrs::Username},
-};
 use channel_bind::*;
 use five_tuple::*;
 use permission::*;
@@ -30,8 +26,10 @@ use tokio::{
 };
 
 use crate::{
+    con::Conn,
     error::*,
     proto::{chandata::*, channum::*, data::*, peeraddr::*},
+    stun::{agent::*, msg::*, textattrs::Username},
 };
 
 const RTP_MTU: usize = 1500;

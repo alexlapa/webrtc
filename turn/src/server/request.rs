@@ -7,7 +7,7 @@ use std::{
 };
 
 use crate::{
-    net::Conn,
+    con::Conn,
     stun::{
         self, agent::*, attrs::*, error_code::*, fingerprint::*, integrity::*, msg::*,
         textattrs::*, uattrs::*, xoraddr::*,
@@ -61,30 +61,13 @@ pub struct Request {
     pub auth_handler: Arc<dyn AuthHandler + Send + Sync>,
     pub realm: String,
     pub channel_bind_timeout: Duration,
+
+    pub five_tuple: FiveTuple,
 }
 
 impl Request {
-    pub fn new(
-        conn: Arc<dyn Conn + Send + Sync>,
-        src_addr: SocketAddr,
-        allocation_manager: Arc<Manager>,
-        auth_handler: Arc<dyn AuthHandler + Send + Sync>,
-    ) -> Self {
-        Request {
-            conn,
-            src_addr,
-            buff: vec![],
-            allocation_manager,
-            nonces: Arc::new(Mutex::new(HashMap::new())),
-            auth_handler,
-            realm: String::new(),
-            channel_bind_timeout: Duration::from_secs(0),
-        }
-    }
-
     /// Processes the give [`Request`]
     pub async fn handle_request(&mut self) -> Result<(), Error> {
-        println!("handle_request");
         if ChannelData::is_channel_data(&self.buff) {
             self.handle_data_packet().await
         } else {
@@ -109,23 +92,27 @@ impl Request {
             ..Default::default()
         };
         m.decode()?;
-
-        self.process_message_handler(&m).await
-    }
-
-    async fn process_message_handler(&mut self, m: &Message) -> Result<(), Error> {
         if m.typ.class == CLASS_INDICATION {
             match m.typ.method {
-                METHOD_SEND => self.handle_send_indication(m).await,
+                METHOD_SEND => self.handle_send_indication(&m).await,
                 _ => Err(Error::ErrUnexpectedClass),
             }
         } else if m.typ.class == CLASS_REQUEST {
             match m.typ.method {
-                METHOD_ALLOCATE => self.handle_allocate_request(m).await,
-                METHOD_REFRESH => self.handle_refresh_request(m).await,
-                METHOD_CREATE_PERMISSION => self.handle_create_permission_request(m).await,
-                METHOD_CHANNEL_BIND => self.handle_channel_bind_request(m).await,
-                METHOD_BINDING => self.handle_binding_request(m).await,
+                METHOD_ALLOCATE => self.handle_allocate_request(&m).await,
+                METHOD_REFRESH => self.handle_refresh_request(&m).await,
+                METHOD_CREATE_PERMISSION => self.handle_create_permission_request(&m).await,
+                METHOD_CHANNEL_BIND => self.handle_channel_bind_request(&m).await,
+                METHOD_BINDING => self.handle_binding_request(&m).await,
+                METHOD_CONNECT => {
+                    unimplemented!("METHOD_CONNECT")
+                }
+                METHOD_CONNECTION_BIND => {
+                    unimplemented!("METHOD_CONNECTION_BIND")
+                }
+                METHOD_CONNECTION_ATTEMPT => {
+                    unimplemented!("METHOD_CONNECTION_ATTEMPT")
+                }
                 _ => Err(Error::ErrUnexpectedClass),
             }
         } else {
@@ -289,11 +276,6 @@ impl Request {
                 return Ok(());
             };
 
-        let five_tuple = FiveTuple {
-            src_addr: self.src_addr,
-            dst_addr: self.conn.local_addr()?,
-            protocol: PROTO_UDP,
-        };
         let mut requested_port = 0;
         let mut reservation_token = "".to_owned();
         let mut use_ipv4 = true;
@@ -303,7 +285,7 @@ impl Request {
         //    Mismatch) error.
         if self
             .allocation_manager
-            .get_allocation(&five_tuple)
+            .get_allocation(&self.five_tuple)
             .await
             .is_some()
         {
@@ -315,6 +297,7 @@ impl Request {
                     reason: vec![],
                 })],
             )?;
+
             return build_and_send_err(
                 &self.conn,
                 self.src_addr,
@@ -329,7 +312,7 @@ impl Request {
         //    server rejects the request with a 400 (Bad Request) error.  Otherwise, if
         //    the attribute is included but specifies a protocol other that UDP, the
         //    server rejects the request with a 442 (Unsupported Transport Protocol)
-        //    error.
+        //    error. + rfc6062
         let mut requested_transport = RequestedTransport::default();
         if let Err(err) = requested_transport.get_from(m) {
             let bad_request_msg = build_msg(
@@ -342,8 +325,9 @@ impl Request {
             )?;
             return build_and_send_err(&self.conn, self.src_addr, bad_request_msg, err.into())
                 .await;
-        } else if requested_transport.protocol != PROTO_UDP {
-            let msg = build_msg(
+        }
+        if requested_transport.protocol != PROTO_TCP && requested_transport.protocol != PROTO_UDP {
+            let bad_request_msg = build_msg(
                 m.transaction_id,
                 MessageType::new(METHOD_ALLOCATE, CLASS_ERROR_RESPONSE),
                 vec![Box::new(ErrorCodeAttribute {
@@ -354,8 +338,8 @@ impl Request {
             return build_and_send_err(
                 &self.conn,
                 self.src_addr,
-                msg,
-                Error::ErrRequestedTransportMustBeUdp,
+                bad_request_msg,
+                Error::UsupportedRelayProto,
             )
             .await;
         }
@@ -474,7 +458,6 @@ impl Request {
                 }
             }
         }
-
         // 6. The server checks if the request contains an EVEN-PORT attribute. If yes,
         //    then the server checks that it can satisfy the request (i.e., can allocate
         //    a relayed transport address as described below).  If the server cannot
@@ -485,7 +468,11 @@ impl Request {
             let mut random_port = 1;
 
             while random_port % 2 != 0 {
-                random_port = match self.allocation_manager.get_random_even_port().await {
+                random_port = match self
+                    .allocation_manager
+                    .get_random_even_port(requested_transport.protocol)
+                    .await
+                {
                     Ok(port) => port,
                     Err(err) => {
                         let insufficient_capacity_msg = build_msg(
@@ -526,12 +513,13 @@ impl Request {
         let a = match self
             .allocation_manager
             .create_allocation(
-                five_tuple,
+                self.five_tuple,
                 Arc::clone(&self.conn),
                 requested_port,
                 lifetime_duration,
                 username,
                 use_ipv4,
+                requested_transport.protocol,
             )
             .await
         {
@@ -569,7 +557,6 @@ impl Request {
         let (src_ip, src_port) = (self.src_addr.ip(), self.src_addr.port());
         let relay_ip = a.relay_addr.ip();
         let relay_port = a.relay_addr.port();
-
         let msg = {
             if !reservation_token.is_empty() {
                 self.allocation_manager
@@ -618,14 +605,11 @@ impl Request {
             };
 
         let lifetime_duration = allocation_lifetime(m);
-        let five_tuple = FiveTuple {
-            src_addr: self.src_addr,
-            dst_addr: self.conn.local_addr()?,
-            protocol: PROTO_UDP,
-        };
-
         if lifetime_duration != Duration::from_secs(0) {
-            let a = self.allocation_manager.get_allocation(&five_tuple).await;
+            let a = self
+                .allocation_manager
+                .get_allocation(&self.five_tuple)
+                .await;
             if let Some(a) = a {
                 // If a server receives a Refresh Request with a
                 // REQUESTED-ADDRESS-FAMILY attribute, and the
@@ -659,7 +643,9 @@ impl Request {
                 return Err(Error::ErrNoAllocationFound);
             }
         } else {
-            self.allocation_manager.delete_allocation(&five_tuple).await;
+            self.allocation_manager
+                .delete_allocation(&self.five_tuple)
+                .await;
         }
 
         let msg = build_msg(
@@ -682,11 +668,7 @@ impl Request {
 
         let a = self
             .allocation_manager
-            .get_allocation(&FiveTuple {
-                src_addr: self.src_addr,
-                dst_addr: self.conn.local_addr()?,
-                protocol: PROTO_UDP,
-            })
+            .get_allocation(&self.five_tuple)
             .await;
 
         if let Some(a) = a {
@@ -775,11 +757,7 @@ impl Request {
 
         let a = self
             .allocation_manager
-            .get_allocation(&FiveTuple {
-                src_addr: self.src_addr,
-                dst_addr: self.conn.local_addr()?,
-                protocol: PROTO_UDP,
-            })
+            .get_allocation(&self.five_tuple)
             .await;
 
         if let Some(a) = a {
@@ -815,11 +793,7 @@ impl Request {
 
         let a = self
             .allocation_manager
-            .get_allocation(&FiveTuple {
-                src_addr: self.src_addr,
-                dst_addr: self.conn.local_addr()?,
-                protocol: PROTO_UDP,
-            })
+            .get_allocation(&self.five_tuple)
             .await;
 
         if let Some(a) = a {
@@ -918,11 +892,7 @@ impl Request {
 
         let a = self
             .allocation_manager
-            .get_allocation(&FiveTuple {
-                src_addr: self.src_addr,
-                dst_addr: self.conn.local_addr()?,
-                protocol: PROTO_UDP,
-            })
+            .get_allocation(&self.five_tuple)
             .await;
 
         if let Some(a) = a {
@@ -1033,11 +1003,12 @@ pub(crate) fn allocation_lifetime(m: &Message) -> Duration {
 mod request_test {
     use std::{net::IpAddr, str::FromStr};
 
-    use crate::{error::Error, net::*, relay::*};
     use tokio::{
         net::UdpSocket,
         time::{Duration, Instant},
     };
+
+    use crate::{con::*, error::Error, relay::*};
 
     use super::*;
 
@@ -1103,34 +1074,43 @@ mod request_test {
         }));
 
         let socket = SocketAddr::new(IpAddr::from_str("127.0.0.1").unwrap(), 5000);
-
-        let mut r = Request::new(l, socket, allocation_manager, Arc::new(TestAuthHandler {}));
+        let five_tuple = FiveTuple {
+            src_addr: socket,
+            dst_addr: l.local_addr().unwrap(),
+            protocol: l.proto(),
+        };
+        let mut r = Request {
+            conn: l,
+            src_addr: socket,
+            buff: vec![],
+            allocation_manager,
+            nonces: Arc::new(Mutex::new(HashMap::new())),
+            auth_handler: Arc::new(TestAuthHandler {}),
+            realm: String::new(),
+            channel_bind_timeout: Duration::from_secs(0),
+            five_tuple,
+        };
 
         {
             let mut nonces = r.nonces.lock().await;
             nonces.insert(STATIC_KEY.to_owned(), Instant::now());
         }
 
-        let five_tuple = FiveTuple {
-            src_addr: r.src_addr,
-            dst_addr: r.conn.local_addr().unwrap(),
-            protocol: PROTO_UDP,
-        };
-
         r.allocation_manager
             .create_allocation(
-                five_tuple,
+                r.five_tuple,
                 Arc::clone(&r.conn),
                 0,
                 Duration::from_secs(3600),
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
         assert!(r
             .allocation_manager
-            .get_allocation(&five_tuple)
+            .get_allocation(&r.five_tuple)
             .await
             .is_some());
 
@@ -1152,7 +1132,7 @@ mod request_test {
         r.handle_refresh_request(&m).await.unwrap();
         assert!(r
             .allocation_manager
-            .get_allocation(&five_tuple)
+            .get_allocation(&r.five_tuple)
             .await
             .is_none());
     }

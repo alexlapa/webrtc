@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{net::Conn, stun::textattrs::Username};
 use futures::future;
 use tokio::sync::mpsc;
 
 use super::*;
-use crate::{error::*, relay::*};
+
+use crate::{con::Conn, error::*, proto::Protocol, relay::*, stun::textattrs::Username};
 
 /// `ManagerConfig` a bag of config params for `Manager`.
 pub struct ManagerConfig {
@@ -74,6 +74,7 @@ impl Manager {
     }
 
     /// Creates a new [`Allocation`] and starts relaying.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_allocation(
         &self,
         five_tuple: FiveTuple,
@@ -82,6 +83,7 @@ impl Manager {
         lifetime: Duration,
         username: Username,
         use_ipv4: bool,
+        protocol: Protocol,
     ) -> Result<Arc<Allocation>, Error> {
         if lifetime == Duration::from_secs(0) {
             return Err(Error::ErrLifetimeZero);
@@ -93,7 +95,7 @@ impl Manager {
 
         let (relay_socket, relay_addr) = self
             .relay_addr_generator
-            .allocate_conn(use_ipv4, requested_port)
+            .allocate_conn(use_ipv4, requested_port, protocol)
             .await?;
         let mut a = Allocation::new(
             turn_socket,
@@ -185,8 +187,11 @@ impl Manager {
     }
 
     /// Returns a random un-allocated udp4 port.
-    pub async fn get_random_even_port(&self) -> Result<u16, Error> {
-        let (_, addr) = self.relay_addr_generator.allocate_conn(true, 0).await?;
+    pub async fn get_random_even_port(&self, protocol: Protocol) -> Result<u16, Error> {
+        let (_, addr) = self
+            .relay_addr_generator
+            .allocate_conn(true, 0, protocol)
+            .await?;
         Ok(addr.port())
     }
 }
@@ -195,14 +200,15 @@ impl Manager {
 mod allocation_manager_test {
     use std::{net::Ipv4Addr, str::FromStr};
 
-    use crate::{
-        net::Net,
-        stun::{attrs::ATTR_USERNAME, textattrs::TextAttribute},
-    };
     use tokio::net::UdpSocket;
 
     use super::*;
-    use crate::proto::lifetime::DEFAULT_LIFETIME;
+
+    use crate::{
+        con::Net,
+        proto::{lifetime::DEFAULT_LIFETIME, PROTO_UDP},
+        stun::{attrs::ATTR_USERNAME, textattrs::TextAttribute},
+    };
 
     fn new_test_manager() -> Manager {
         let config = ManagerConfig {
@@ -258,6 +264,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -279,7 +286,7 @@ mod allocation_manager_test {
                 .await
                 .unwrap();
 
-            a.relay_socket.local_addr().unwrap().port()
+            a.relay_socket.local_addr().port()
         };
 
         let relay_addr_with_host_str = format!("127.0.0.1:{port}");
@@ -364,6 +371,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -376,6 +384,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await;
         assert!(result.is_err(), "expected error, but got ok");
@@ -399,6 +408,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -438,6 +448,7 @@ mod allocation_manager_test {
                     lifetime,
                     TextAttribute::new(ATTR_USERNAME, "user".into()),
                     true,
+                    PROTO_UDP,
                 )
                 .await
                 .unwrap();
@@ -488,6 +499,7 @@ mod allocation_manager_test {
                 Duration::from_millis(100),
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -501,6 +513,7 @@ mod allocation_manager_test {
                 Duration::from_millis(200),
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -539,6 +552,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -550,6 +564,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();
@@ -561,6 +576,7 @@ mod allocation_manager_test {
                 DEFAULT_LIFETIME,
                 TextAttribute::new(ATTR_USERNAME, "user2".into()),
                 true,
+                PROTO_UDP,
             )
             .await
             .unwrap();

@@ -1,9 +1,8 @@
 use std::fmt;
 
-use crate::stun;
 use ring::hmac;
 
-use crate::stun::{attrs::*, checks::*, error::*, msg::*};
+use crate::stun::{self, attrs::*, checks::*, error::*, msg::*};
 
 // MessageIntegrity represents MESSAGE-INTEGRITY attribute.
 //

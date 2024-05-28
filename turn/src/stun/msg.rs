@@ -3,11 +3,10 @@ use std::{
     io::{Read, Write},
 };
 
-use crate::stun;
 use base64::{prelude::BASE64_STANDARD, Engine};
 use rand::Rng;
 
-use crate::stun::{agent::*, attrs::*, error::*};
+use crate::stun::{self, agent::*, attrs::*, error::*};
 
 // MAGIC_COOKIE is fixed value that aids in distinguishing STUN packets
 // from packets of other protocols when STUN is multiplexed with those

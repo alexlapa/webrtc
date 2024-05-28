@@ -3,7 +3,7 @@ use std::{io, string::FromUtf8Error};
 use thiserror::Error;
 use tokio::sync::mpsc::error::SendError as MpscSendError;
 
-use crate::net;
+use crate::con;
 
 #[derive(Debug, Error, PartialEq)]
 #[non_exhaustive]
@@ -69,7 +69,7 @@ pub enum Error {
     MpscSend(String),
 
     #[error("{0}")]
-    Util(#[from] net::Error),
+    Util(#[from] con::Error),
 }
 
 #[derive(Debug, Error)]

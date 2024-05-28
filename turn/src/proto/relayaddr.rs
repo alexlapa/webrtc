@@ -57,14 +57,6 @@ impl Getter for RelayedAddress {
     }
 }
 
-/// `XorRelayedAddress` implements `XOR-RELAYED-ADDRESS` attribute.
-///
-/// It specifies the address and port that the server allocated to the
-/// client. It is encoded in the same way as `XOR-MAPPED-ADDRESS`.
-///
-/// [RFC 5766 Section 14.5](https://www.rfc-editor.org/rfc/rfc5766#section-14.5).
-pub type XorRelayedAddress = RelayedAddress;
-
 #[cfg(test)]
 mod relayaddr_test {
     use std::net::Ipv4Addr;
