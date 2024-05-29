@@ -1,7 +1,6 @@
 # See full list at:
 # https://github.com/rust-lang-nursery/rustfmt/blob/master/Configurations.md
 
-max_width = 100
 format_strings = false
 imports_granularity = "Crate"
 normalize_comments = true

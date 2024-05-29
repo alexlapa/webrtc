@@ -14,30 +14,17 @@ use crate::proto::{Protocol, PROTO_TCP, PROTO_UDP};
 use crate::server::INBOUND_MTU;
 pub use tcp::TcpServer;
 
-// Net represents a local network stack equivalent to a set of layers from NIC
-// up to the transport (UDP / TCP) layer.
-pub struct Net;
-
-impl Default for Net {
-    fn default() -> Self {
-        Self
-    }
-}
-
-impl Net {
-    pub async fn bind(
-        &self,
-        addr: SocketAddr,
-        protocol: Protocol,
-    ) -> Result<Arc<dyn Conn + Send + Sync>, Error> {
-        match protocol {
-            PROTO_UDP => Ok(Arc::new(UdpSocket::bind(addr).await?)),
-            PROTO_TCP => {
-                let tcp_conn = TcpListener::bind(addr).await?;
-                Ok(Arc::new(TcpServer::new(tcp_conn)))
-            }
-            _ => Err(Error::ErrUnsupportedRelayProto),
+pub async fn bind(
+    addr: SocketAddr,
+    protocol: Protocol,
+) -> Result<Arc<dyn Conn + Send + Sync>, Error> {
+    match protocol {
+        PROTO_UDP => Ok(Arc::new(UdpSocket::bind(addr).await?)),
+        PROTO_TCP => {
+            let tcp_conn = TcpListener::bind(addr).await?;
+            Ok(Arc::new(TcpServer::new(tcp_conn)))
         }
+        _ => Err(Error::ErrUnsupportedRelayProto),
     }
 }
 
@@ -100,6 +87,9 @@ impl Conn for UdpSocket {
 #[derive(Error, Debug, PartialEq)]
 #[non_exhaustive]
 pub enum Error {
+    #[error("Underlying TCP/UDP transport is dead")]
+    ErrTransportIsDead,
+
     #[error("Unsupported relay proto")]
     ErrUnsupportedRelayProto,
 
@@ -210,9 +200,7 @@ mod net_test {
 
     #[tokio::test]
     async fn test_net_native_bind() {
-        let nw = Net::default();
-        let conn = nw
-            .bind(SocketAddr::from_str("127.0.0.1:0").unwrap(), PROTO_UDP)
+        let conn = bind(SocketAddr::from_str("127.0.0.1:0").unwrap(), PROTO_UDP)
             .await
             .unwrap();
         let laddr = conn.local_addr();

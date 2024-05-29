@@ -12,7 +12,7 @@ use tokio::{
 };
 use turn::{
     auth::*,
-    con::{Net, TcpServer},
+    con::TcpServer,
     relay::RelayAddressGeneratorRanges,
     server::{config::*, *},
     Error,
@@ -130,7 +130,6 @@ async fn main() -> Result<(), Error> {
                     max_port: 65535,
                     max_retries: 5,
                     address: "0.0.0.0".to_owned(),
-                    net: Arc::new(Net::default()),
                 }),
             },
             ConnConfig {
@@ -143,7 +142,6 @@ async fn main() -> Result<(), Error> {
                     max_port: 65535,
                     max_retries: 5,
                     address: "0.0.0.0".to_owned(),
-                    net: Arc::new(Net::default()),
                 }),
             },
         ],

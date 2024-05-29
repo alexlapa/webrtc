@@ -205,7 +205,6 @@ mod allocation_manager_test {
     use super::*;
 
     use crate::{
-        con::Net,
         proto::{lifetime::DEFAULT_LIFETIME, PROTO_UDP},
         stun::{attrs::ATTR_USERNAME, textattrs::TextAttribute},
     };
@@ -214,7 +213,6 @@ mod allocation_manager_test {
         let config = ManagerConfig {
             relay_addr_generator: Box::new(RelayAddressGeneratorNone {
                 address: "0.0.0.0".to_owned(),
-                net: Arc::new(Net::default()),
             }),
             alloc_close_notify: None,
         };

@@ -1069,7 +1069,6 @@ mod request_test {
         let allocation_manager = Arc::new(Manager::new(ManagerConfig {
             relay_addr_generator: Box::new(RelayAddressGeneratorNone {
                 address: "0.0.0.0".to_owned(),
-                net: Arc::new(Net::default()),
             }),
             alloc_close_notify: None,
         }));

@@ -6,7 +6,7 @@ use std::{
 use async_trait::async_trait;
 
 use crate::{
-    con::{self, Conn, Net},
+    con::{self, Conn},
     error::*,
     proto::Protocol,
 };
@@ -46,8 +46,6 @@ pub struct RelayAddressGeneratorRanges {
 
     /// `address` is passed to Listen/ListenPacket when creating the Relay.
     pub address: String,
-
-    pub net: Arc<Net>,
 }
 
 #[async_trait]
@@ -81,7 +79,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
         if requested_port != 0 {
             let addr =
                 con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
-            let conn = self.net.bind(addr, protocol).await?;
+            let conn = con::bind(addr, protocol).await?;
             let mut relay_addr = conn.local_addr();
             relay_addr.set_ip(self.relay_address);
             return Ok((conn, relay_addr));
@@ -90,7 +88,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
         for _ in 0..max_retries {
             let port = self.min_port + rand::random::<u16>() % (self.max_port - self.min_port + 1);
             let addr = con::lookup_host(use_ipv4, &format!("{}:{}", self.address, port)).await?;
-            let conn = match self.net.bind(addr, protocol).await {
+            let conn = match con::bind(addr, protocol).await {
                 Ok(conn) => conn,
                 Err(_) => continue,
             };
@@ -108,7 +106,6 @@ impl RelayAddressGenerator for RelayAddressGeneratorRanges {
 pub struct RelayAddressGeneratorNone {
     /// `address` is passed to Listen/ListenPacket when creating the Relay.
     pub address: String,
-    pub net: Arc<Net>,
 }
 
 #[async_trait]
@@ -129,7 +126,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorNone {
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let addr =
             con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
-        let conn = self.net.bind(addr, protocol).await?;
+        let conn = con::bind(addr, protocol).await?;
         let relay_addr = conn.local_addr();
         Ok((conn, relay_addr))
     }
@@ -145,8 +142,6 @@ pub struct RelayAddressGeneratorStatic {
 
     /// `address` is passed to Listen/ListenPacket when creating the Relay.
     pub address: String,
-
-    pub net: Arc<Net>,
 }
 
 #[async_trait]
@@ -167,7 +162,7 @@ impl RelayAddressGenerator for RelayAddressGeneratorStatic {
     ) -> Result<(Arc<dyn Conn + Send + Sync>, SocketAddr), Error> {
         let addr =
             con::lookup_host(use_ipv4, &format!("{}:{}", self.address, requested_port)).await?;
-        let conn = self.net.bind(addr, protocol).await?;
+        let conn = con::bind(addr, protocol).await?;
         let mut relay_addr = conn.local_addr();
         relay_addr.set_ip(self.relay_address);
         return Ok((conn, relay_addr));
