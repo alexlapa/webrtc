@@ -362,7 +362,7 @@ impl Allocation {
                     }
                 };
 
-                log::debug!(
+                log::trace!(
                     "relay socket {:?} received {} bytes from {}",
                     relay_socket.local_addr(),
                     data.len(),
@@ -432,7 +432,7 @@ impl Allocation {
                         };
 
                         if let Some(msg) = msg {
-                            log::debug!(
+                            log::trace!(
                                 "relaying message from {} to client at {}",
                                 src_addr,
                                 five_tuple.src_addr

@@ -107,7 +107,7 @@ impl Manager {
         );
         a.allocations = Some(Arc::clone(&self.allocations));
 
-        log::debug!("listening on relay addr: {:?}", a.relay_addr);
+        log::trace!("listening on relay addr: {:?}", a.relay_addr);
         a.start(lifetime).await;
         a.packet_handler().await;
 

@@ -76,7 +76,7 @@ impl Request {
     }
 
     async fn handle_data_packet(&mut self) -> Result<(), Error> {
-        log::debug!("received DataPacket from {}", self.src_addr);
+        log::trace!("received DataPacket from {}", self.src_addr);
         let mut c = ChannelData {
             raw: self.buff.clone(),
             ..Default::default()
@@ -86,7 +86,7 @@ impl Request {
     }
 
     async fn handle_turn_packet(&mut self) -> Result<(), Error> {
-        log::debug!("handle_turn_packet");
+        log::trace!("handle_turn_packet");
         let mut m = Message {
             raw: self.buff.clone(),
             ..Default::default()
@@ -104,15 +104,6 @@ impl Request {
                 METHOD_CREATE_PERMISSION => self.handle_create_permission_request(&m).await,
                 METHOD_CHANNEL_BIND => self.handle_channel_bind_request(&m).await,
                 METHOD_BINDING => self.handle_binding_request(&m).await,
-                METHOD_CONNECT => {
-                    unimplemented!("METHOD_CONNECT")
-                }
-                METHOD_CONNECTION_BIND => {
-                    unimplemented!("METHOD_CONNECTION_BIND")
-                }
-                METHOD_CONNECTION_ATTEMPT => {
-                    unimplemented!("METHOD_CONNECTION_ATTEMPT")
-                }
                 _ => Err(Error::ErrUnexpectedClass),
             }
         } else {
@@ -243,7 +234,7 @@ impl Request {
     }
 
     pub(crate) async fn handle_binding_request(&mut self, m: &Message) -> Result<(), Error> {
-        log::debug!("received BindingRequest from {}", self.src_addr);
+        log::trace!("received BindingRequest from {}", self.src_addr);
 
         let (ip, port) = (self.src_addr.ip(), self.src_addr.port());
 
@@ -261,7 +252,7 @@ impl Request {
 
     /// https://tools.ietf.org/html/rfc5766#section-6.2
     pub(crate) async fn handle_allocate_request(&mut self, m: &Message) -> Result<(), Error> {
-        log::debug!("received AllocateRequest from {}", self.src_addr);
+        log::trace!("received AllocateRequest from {}", self.src_addr);
 
         // 1. The server MUST require that the request be authenticated.  This
         //    authentication MUST be done using the long-term credential
@@ -272,7 +263,7 @@ impl Request {
             if let Some(mi) = self.authenticate_request(m, METHOD_ALLOCATE).await? {
                 mi
             } else {
-                log::debug!("no MessageIntegrity");
+                log::trace!("no MessageIntegrity");
                 return Ok(());
             };
 
@@ -312,7 +303,7 @@ impl Request {
         //    server rejects the request with a 400 (Bad Request) error.  Otherwise, if
         //    the attribute is included but specifies a protocol other that UDP, the
         //    server rejects the request with a 442 (Unsupported Transport Protocol)
-        //    error. + rfc6062
+        //    error.
         let mut requested_transport = RequestedTransport::default();
         if let Err(err) = requested_transport.get_from(m) {
             let bad_request_msg = build_msg(
@@ -326,7 +317,7 @@ impl Request {
             return build_and_send_err(&self.conn, self.src_addr, bad_request_msg, err.into())
                 .await;
         }
-        if requested_transport.protocol != PROTO_TCP && requested_transport.protocol != PROTO_UDP {
+        if requested_transport.protocol != PROTO_UDP {
             let bad_request_msg = build_msg(
                 m.transaction_id,
                 MessageType::new(METHOD_ALLOCATE, CLASS_ERROR_RESPONSE),
@@ -594,13 +585,13 @@ impl Request {
     }
 
     pub(crate) async fn handle_refresh_request(&mut self, m: &Message) -> Result<(), Error> {
-        log::debug!("received RefreshRequest from {}", self.src_addr);
+        log::trace!("received RefreshRequest from {}", self.src_addr);
 
         let (_, message_integrity) =
             if let Some(mi) = self.authenticate_request(m, METHOD_REFRESH).await? {
                 mi
             } else {
-                log::debug!("no MessageIntegrity");
+                log::trace!("no MessageIntegrity");
                 return Ok(());
             };
 
@@ -664,7 +655,7 @@ impl Request {
         &mut self,
         m: &Message,
     ) -> Result<(), Error> {
-        log::debug!("received CreatePermission from {}", self.src_addr);
+        log::trace!("received CreatePermission from {}", self.src_addr);
 
         let a = self
             .allocation_manager
@@ -678,7 +669,7 @@ impl Request {
             {
                 mi
             } else {
-                log::debug!("no MessageIntegrity");
+                log::trace!("no MessageIntegrity");
                 return Ok(());
             };
             let mut add_count = 0;
@@ -721,7 +712,7 @@ impl Request {
                         .await;
                     }
 
-                    log::debug!(
+                    log::trace!(
                         "adding permission for {}",
                         format!("{}:{}", peer_address.ip, peer_address.port)
                     );
@@ -753,7 +744,7 @@ impl Request {
     }
 
     pub(crate) async fn handle_send_indication(&mut self, m: &Message) -> Result<(), Error> {
-        log::debug!("received SendIndication from {}", self.src_addr);
+        log::trace!("received SendIndication from {}", self.src_addr);
 
         let a = self
             .allocation_manager
@@ -789,7 +780,7 @@ impl Request {
     }
 
     pub(crate) async fn handle_channel_bind_request(&mut self, m: &Message) -> Result<(), Error> {
-        log::debug!("received ChannelBindRequest from {}", self.src_addr);
+        log::trace!("received ChannelBindRequest from {}", self.src_addr);
 
         let a = self
             .allocation_manager
@@ -810,7 +801,7 @@ impl Request {
                 if let Some(mi) = self.authenticate_request(m, METHOD_CHANNEL_BIND).await? {
                     mi
                 } else {
-                    log::debug!("no MessageIntegrity");
+                    log::trace!("no MessageIntegrity");
                     return Ok(());
                 };
             let mut channel = ChannelNumber::default();
@@ -859,7 +850,7 @@ impl Request {
                 }
             }
 
-            log::debug!(
+            log::trace!(
                 "binding channel {} to {}",
                 channel,
                 format!("{}:{}", peer_addr.ip, peer_addr.port)
@@ -888,7 +879,7 @@ impl Request {
     }
 
     pub(crate) async fn handle_channel_data(&mut self, c: ChannelData) -> Result<(), Error> {
-        log::debug!("received ChannelData from {}", self.src_addr);
+        log::trace!("received ChannelData from {}", self.src_addr);
 
         let a = self
             .allocation_manager

@@ -209,6 +209,5 @@ mod net_test {
             "127.0.0.1",
             "local_addr ip should match 127.0.0.1"
         );
-        log::debug!("laddr: {}", laddr);
     }
 }
