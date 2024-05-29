@@ -24,7 +24,7 @@ use crate::{
     proto::lifetime::DEFAULT_LIFETIME,
 };
 
-const INBOUND_MTU: usize = 1500;
+pub const INBOUND_MTU: usize = 1500;
 
 /// Server is an instance of the TURN Server
 pub struct Server {
@@ -149,8 +149,6 @@ impl Server {
         channel_bind_timeout: Duration,
         mut handle_rx: broadcast::Receiver<Command>,
     ) {
-        let mut buf = vec![0u8; INBOUND_MTU];
-
         let (mut close_tx, mut close_rx) = oneshot::channel::<()>();
 
         tokio::spawn({
@@ -191,8 +189,8 @@ impl Server {
         });
 
         loop {
-            let (n, addr) = tokio::select! {
-                v = conn.recv_from(&mut buf) => {
+            let (buff, addr) = tokio::select! {
+                v = conn.recv_from() => {
                     match v {
                         Ok(v) => v,
                         Err(err) => {
@@ -207,7 +205,7 @@ impl Server {
             let mut r = Request {
                 conn: Arc::clone(&conn),
                 src_addr: addr,
-                buff: buf[..n].to_vec(),
+                buff,
                 allocation_manager: Arc::clone(&allocation_manager),
                 nonces: Arc::clone(&nonces),
                 auth_handler: Arc::clone(&auth_handler),

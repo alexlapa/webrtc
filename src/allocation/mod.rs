@@ -32,8 +32,6 @@ use crate::{
     stun::{agent::*, msg::*, textattrs::Username},
 };
 
-const RTP_MTU: usize = 1500;
-
 pub type AllocationMap = Arc<Mutex<HashMap<FiveTuple, Arc<Allocation>>>>;
 
 /// Information about an [`Allocation`].
@@ -340,15 +338,13 @@ impl Allocation {
         self.drop_tx = Some(drop_tx);
 
         tokio::spawn(async move {
-            let mut buffer = vec![0u8; RTP_MTU];
-
             tokio::pin!(drop_rx);
 
             loop {
-                let (n, src_addr) = tokio::select! {
-                    result = relay_socket.recv_from(&mut buffer) => {
+                let (data, src_addr) = tokio::select! {
+                    result = relay_socket.recv_from() => {
                         match result {
-                            Ok((n, src_addr)) => (n, src_addr),
+                            Ok((data, src_addr)) => (data, src_addr),
                             Err(_) => {
                                 if let Some(allocs) = &allocations {
                                     let mut allocs = allocs.lock().await;
@@ -369,7 +365,7 @@ impl Allocation {
                 log::debug!(
                     "relay socket {:?} received {} bytes from {}",
                     relay_socket.local_addr(),
-                    n,
+                    data.len(),
                     src_addr
                 );
 
@@ -387,14 +383,14 @@ impl Allocation {
 
                 if let Some(number) = cb_number {
                     let mut channel_data = ChannelData {
-                        data: buffer[..n].to_vec(),
+                        data,
                         number,
                         raw: vec![],
                     };
                     channel_data.encode();
 
                     if let Err(err) = turn_socket
-                        .send_to(&channel_data.raw, five_tuple.src_addr)
+                        .send_to(channel_data.raw, five_tuple.src_addr)
                         .await
                     {
                         log::error!(
@@ -415,7 +411,7 @@ impl Allocation {
                                 ip: src_addr.ip(),
                                 port: src_addr.port(),
                             };
-                            let data_attr = Data(buffer[..n].to_vec());
+                            let data_attr = Data(data);
 
                             let mut msg = Message::new();
                             if let Err(err) = msg.build(&[
@@ -442,7 +438,7 @@ impl Allocation {
                                 five_tuple.src_addr
                             );
                             if let Err(err) =
-                                turn_socket.send_to(&msg.raw, five_tuple.src_addr).await
+                                turn_socket.send_to(msg.raw, five_tuple.src_addr).await
                             {
                                 log::error!(
                                     "Failed to send DataIndication from allocation {} {}",

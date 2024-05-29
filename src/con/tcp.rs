@@ -7,7 +7,7 @@ use std::{
 use async_trait::async_trait;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, ToSocketAddrs, UdpSocket},
+    net::TcpListener,
     sync::{mpsc, Mutex},
 };
 
@@ -25,20 +25,18 @@ pub struct TcpServer {
 
 #[async_trait]
 impl Conn for TcpServer {
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), Error> {
+    async fn recv_from(&self) -> Result<(Vec<u8>, SocketAddr), Error> {
         let (data, addr) = self.ingress_rx.lock().await.recv().await.unwrap();
-        let len = data.len();
-        buf[0..len].copy_from_slice(data.as_slice());
 
-        Ok((len, addr))
+        Ok((data, addr))
     }
 
-    async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize, Error> {
+    async fn send_to(&self, data: Vec<u8>, target: SocketAddr) -> Result<usize, Error> {
+        let len = data.len();
         let mut writers = self.writers.lock().await;
-        let vals: Vec<_> = writers.keys().cloned().collect();
         match writers.entry(target) {
             Entry::Occupied(mut e) => {
-                if e.get_mut().send(buf.to_vec()).await.is_err() {
+                if e.get_mut().send(data).await.is_err() {
                     // Underlying TCP stream is dead.
                     _ = e.remove_entry();
                     // TODO: return error
@@ -49,7 +47,8 @@ impl Conn for TcpServer {
             }
         }
 
-        Ok(buf.len())
+        // TODO: return actual bytes written count
+        Ok(len)
     }
 
     fn local_addr(&self) -> SocketAddr {

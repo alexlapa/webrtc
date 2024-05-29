@@ -7,15 +7,11 @@ use thiserror::Error;
 use std::{net::SocketAddr, sync::Arc};
 
 use async_trait::async_trait;
-use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, ToSocketAddrs, UdpSocket},
-};
+use tokio::net::{TcpListener, ToSocketAddrs, UdpSocket};
 
-use crate::{
-    proto::{Protocol, PROTO_TCP, PROTO_UDP},
-};
+use crate::proto::{Protocol, PROTO_TCP, PROTO_UDP};
 
+use crate::server::INBOUND_MTU;
 pub use tcp::TcpServer;
 
 // Net represents a local network stack equivalent to a set of layers from NIC
@@ -47,8 +43,8 @@ impl Net {
 
 #[async_trait]
 pub trait Conn {
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), Error>;
-    async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize, Error>;
+    async fn recv_from(&self) -> Result<(Vec<u8>, SocketAddr), Error>;
+    async fn send_to(&self, buf: Vec<u8>, target: SocketAddr) -> Result<usize, Error>;
     fn local_addr(&self) -> SocketAddr;
     fn proto(&self) -> Protocol;
     async fn close(&self) -> Result<(), Error>;
@@ -76,14 +72,16 @@ where
 
 #[async_trait]
 impl Conn for UdpSocket {
-    async fn recv_from(&self, buf: &mut [u8]) -> Result<(usize, SocketAddr), Error> {
-        let r = self.recv_from(buf).await?;
+    async fn recv_from(&self) -> Result<(Vec<u8>, SocketAddr), Error> {
+        let mut buf = vec![0u8; INBOUND_MTU];
+        let (len, addr) = self.recv_from(&mut buf).await?;
+        buf.truncate(len);
 
-        Ok(r)
+        Ok((buf, addr))
     }
 
-    async fn send_to(&self, buf: &[u8], target: SocketAddr) -> Result<usize, Error> {
-        Ok(self.send_to(buf, target).await?)
+    async fn send_to(&self, data: Vec<u8>, target: SocketAddr) -> Result<usize, Error> {
+        Ok(self.send_to(&data, target).await?)
     }
 
     fn local_addr(&self) -> SocketAddr {

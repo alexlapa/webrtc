@@ -240,7 +240,7 @@ mod allocation_manager_test {
         let (data_ch_tx, mut data_ch_rx) = mpsc::channel(1);
         // client listener read data
         tokio::spawn(async move {
-            let mut buffer = vec![0u8; RTP_MTU];
+            let mut buffer = vec![0u8; 1500];
             loop {
                 let n = match client_listener.recv_from(&mut buffer).await {
                     Ok((n, _)) => n,

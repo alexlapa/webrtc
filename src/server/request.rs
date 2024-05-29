@@ -82,7 +82,7 @@ impl Request {
             ..Default::default()
         };
         c.decode()?;
-        self.handle_channel_data(&c).await
+        self.handle_channel_data(c).await
     }
 
     async fn handle_turn_packet(&mut self) -> Result<(), Error> {
@@ -774,12 +774,12 @@ impl Request {
                 return Err(Error::ErrNoPermission);
             }
 
-            let l = a.relay_socket.send_to(&data_attr.0, msg_dst).await?;
-            if l != data_attr.0.len() {
+            let data_len = data_attr.0.len();
+            let l = a.relay_socket.send_to(data_attr.0, msg_dst).await?;
+            if l != data_len {
                 Err(Error::ErrShortWrite)
             } else {
-                a.relayed_bytes
-                    .fetch_add(data_attr.0.len(), Ordering::AcqRel);
+                a.relayed_bytes.fetch_add(l, Ordering::AcqRel);
 
                 Ok(())
             }
@@ -887,7 +887,7 @@ impl Request {
         }
     }
 
-    pub(crate) async fn handle_channel_data(&mut self, c: &ChannelData) -> Result<(), Error> {
+    pub(crate) async fn handle_channel_data(&mut self, c: ChannelData) -> Result<(), Error> {
         log::debug!("received ChannelData from {}", self.src_addr);
 
         let a = self
@@ -898,11 +898,12 @@ impl Request {
         if let Some(a) = a {
             let channel = a.get_channel_addr(&c.number).await;
             if let Some(peer) = channel {
-                let l = a.relay_socket.send_to(&c.data, peer).await?;
-                if l != c.data.len() {
+                let data_len = c.data.len();
+                let l = a.relay_socket.send_to(c.data, peer).await?;
+                if l != data_len {
                     Err(Error::ErrShortWrite)
                 } else {
-                    a.relayed_bytes.fetch_add(c.data.len(), Ordering::AcqRel);
+                    a.relayed_bytes.fetch_add(l, Ordering::AcqRel);
 
                     Ok(())
                 }
@@ -952,7 +953,7 @@ pub(crate) async fn build_and_send(
     dst: SocketAddr,
     msg: Message,
 ) -> Result<(), Error> {
-    let _ = conn.send_to(&msg.raw, dst).await?;
+    let _ = conn.send_to(msg.raw, dst).await?;
     Ok(())
 }
 
